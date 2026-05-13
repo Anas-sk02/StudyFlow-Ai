@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/supabase/client";
 import type { StudyTask } from "@/lib/types";
+import { createTaskAction } from "./actions";
 import { cn } from "@/lib/utils";
 
 export default function TasksPage() {
@@ -92,52 +93,52 @@ export default function TasksPage() {
 
   const subjects = useMemo(() => Array.from(new Set(tasks.map(t => t.subject))), [tasks]);
 
-  async function addTask(formData: FormData) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return toast.error("You must be logged in.");
+  async function addTask(formData: FormData): Promise<void> {
+    const result = await createTaskAction(formData);
+    
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
 
-    const payload = {
-      user_id: user.id,
-      title: String(formData.get("title")),
-      subject: String(formData.get("subject")),
-      description: String(formData.get("description") || ""),
-      deadline: String(formData.get("deadline") || ""),
-      due_time: String(formData.get("due_time") || ""),
-      priority: String(formData.get("priority") || "medium"),
-      estimated_hours: Number(formData.get("estimated_hours") || 1),
-      status: "todo",
-    };
-
-    const { data, error } = await supabase.from("study_tasks").insert(payload).select("*").single();
-    if (error) return toast.error(error.message);
-
-    setTasks((old) => [data as StudyTask, ...old]);
-    toast.success("Task created.");
-    setIsAdding(false);
+    if (result.data) {
+      setTasks((old) => [result.data as StudyTask, ...old]);
+      toast.success("Task created.");
+      setIsAdding(false);
+    }
   }
 
-  async function toggleDone(task: StudyTask) {
+  async function toggleDone(task: StudyTask): Promise<void> {
     const next = task.status === "done" ? "todo" : "done";
     const { error } = await supabase.from("study_tasks").update({ status: next }).eq("id", task.id);
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     setTasks((old) => old.map((t) => (t.id === task.id ? { ...t, status: next } : t)));
     toast.success(next === "done" ? "Task completed!" : "Task restored.");
   }
 
-  async function deleteTask(id: string) {
+  async function deleteTask(id: string): Promise<void> {
     const { error } = await supabase.from("study_tasks").delete().eq("id", id);
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     setTasks((old) => old.filter((t) => t.id !== id));
     toast.success("Task deleted.");
   }
 
-  async function rescheduleTask(id: string, days: number) {
+  async function rescheduleTask(id: string, days: number): Promise<void> {
     const newDate = new Date();
     newDate.setDate(newDate.getDate() + days);
     const deadline = newDate.toISOString().split('T')[0];
     
     const { error } = await supabase.from("study_tasks").update({ deadline }).eq("id", id);
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     setTasks((old) => old.map(t => t.id === id ? { ...t, deadline } : t));
     toast.success(`Rescheduled to ${newDate.toLocaleDateString()}`);
   }
