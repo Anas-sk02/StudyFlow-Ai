@@ -3,10 +3,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { createClient } from "@/supabase/client";
-import { Send, Users, Hash, Plus, MessageSquare, Loader2 } from "lucide-react";
+import { Send, Users, Hash, Plus, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Message = { id: string; room_id: string; content: string; created_at: string; author_email: string };
+type Message = { 
+  id: string; 
+  room_id: string; 
+  content: string; 
+  created_at: string; 
+  author_email: string;
+  isPending?: boolean;
+};
 type Room = { id: string; name: string; topic: string };
 type Profile = { email: string; full_name: string; username: string };
 
@@ -19,8 +26,33 @@ export default function RoomsPage() {
   const [typing, setTyping] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
-  const roomChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const roomChannelRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Helper to handle incoming realtime messages
+  const handleIncomingMessage = (payload: any) => {
+    const newMessage = payload.new as Message;
+    setMessages((currentMessages) => {
+      // Check if this message (by real ID) already exists
+      if (currentMessages.some(m => m.id === newMessage.id)) {
+        return currentMessages;
+      }
+
+      // Filter out any matching optimistic message
+      const filtered = currentMessages.filter(m => 
+        !(m.isPending && 
+          m.author_email === newMessage.author_email && 
+          m.content === newMessage.content)
+      );
+
+      return [...filtered, newMessage];
+    });
+    
+    // Auto-scroll on new message
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+  };
 
   const activeRoom = useMemo(() => rooms.find((room) => room.id === activeRoomId), [rooms, activeRoomId]);
 
@@ -65,23 +97,26 @@ export default function RoomsPage() {
       .channel(`chat:${activeRoomId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${activeRoomId}` },
-        (payload) => {
-          setMessages((old) => [...old, payload.new as Message]);
-          setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-        }
+        { 
+          event: "INSERT", 
+          schema: "public", 
+          table: "messages", 
+          filter: `room_id=eq.${activeRoomId}` 
+        },
+        handleIncomingMessage
       )
       .on("broadcast", { event: "typing" }, ({ payload }) => {
         setTyping(Boolean(payload?.typing));
-        setTimeout(() => setTyping(false), 3000); // Clear typing after 3s
+        setTimeout(() => setTyping(false), 3000);
       })
       .subscribe();
+      
     roomChannelRef.current = channel;
 
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase, activeRoomId]);
+  }, [supabase, activeRoomId, currentUserEmail]);
 
   async function sendMessage(formData: FormData) {
     if (!activeRoomId) return;
@@ -92,13 +127,29 @@ export default function RoomsPage() {
     const form = document.getElementById('chat-form') as HTMLFormElement;
     if (form) form.reset();
 
+    const optimisticMessage: Message = {
+      id: `temp-${Date.now()}`,
+      room_id: activeRoomId,
+      content,
+      author_email: currentUserEmail || "anonymous",
+      created_at: new Date().toISOString(),
+      isPending: true,
+    };
+
+    // Update UI optimistically
+    setMessages((prev) => [...prev, optimisticMessage]);
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+
     const { error } = await supabase.from("messages").insert({
       room_id: activeRoomId,
       content,
       author_email: currentUserEmail || "anonymous",
     });
+
     if (error) {
-      toast.error(error.message);
+      toast.error("Failed to send message: " + error.message);
+      // Remove the optimistic message if it failed
+      setMessages((prev) => prev.filter(m => m.id !== optimisticMessage.id));
       return;
     }
   }
@@ -209,7 +260,11 @@ export default function RoomsPage() {
                     : (authorProfile?.full_name || authorProfile?.username || "Student");
                   
                   return (
-                    <div key={msg.id} className={cn("flex flex-col max-w-[85%] md:max-w-[70%] group", isMe ? "ml-auto items-end" : "mr-auto items-start")}>
+                    <div key={msg.id} className={cn(
+                      "flex flex-col max-w-[85%] md:max-w-[70%] group transition-all duration-300", 
+                      isMe ? "ml-auto items-end" : "mr-auto items-start",
+                      msg.isPending && "opacity-70"
+                    )}>
                       {showHeader && (
                         <div className={cn("flex items-baseline gap-2 mb-1.5", isMe ? "mr-1" : "ml-1")}>
                           <span className={cn("text-[11px] font-bold tracking-tight uppercase", isMe ? "text-primary/70" : "text-muted-foreground/80")}>
@@ -223,9 +278,13 @@ export default function RoomsPage() {
                           "px-4 py-3 text-[14px] leading-relaxed shadow-sm transition-all duration-300",
                           isMe 
                             ? "bg-primary text-primary-foreground rounded-2xl rounded-tr-none shadow-primary/10 hover:shadow-primary/20" 
-                            : "bg-background border border-border/60 text-foreground rounded-2xl rounded-tl-none hover:border-border"
+                            : "bg-background border border-border/60 text-foreground rounded-2xl rounded-tl-none hover:border-border",
+                          msg.isPending && "italic"
                         )}>
                           {msg.content}
+                          {msg.isPending && (
+                            <span className="ml-2 inline-block animate-pulse">...</span>
+                          )}
                         </div>
                       </div>
                     </div>
