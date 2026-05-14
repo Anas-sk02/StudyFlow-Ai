@@ -162,7 +162,7 @@ export default function TasksPage() {
               onClick={() => setActiveTab("active")}
               className={cn(
                 "px-6 py-2.5 rounded-xl text-sm font-bold transition-all",
-                activeTab === "active" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
+                activeTab === "active" ? "bg-background dark:bg-muted text-primary shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-muted-foreground hover:text-foreground"
               )}
             >
               Active
@@ -171,7 +171,7 @@ export default function TasksPage() {
               onClick={() => setActiveTab("completed")}
               className={cn(
                 "px-6 py-2.5 rounded-xl text-sm font-bold transition-all",
-                activeTab === "completed" ? "bg-background text-emerald-500 shadow-sm" : "text-muted-foreground hover:text-foreground"
+                activeTab === "completed" ? "bg-background dark:bg-muted text-emerald-500 shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-muted-foreground hover:text-foreground"
               )}
             >
               Done
@@ -193,7 +193,7 @@ export default function TasksPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-14 rounded-2xl border border-border/60 bg-card/50 pl-12 pr-4 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-muted-foreground shadow-sm"
+            className="w-full h-14 rounded-2xl border border-border/60 bg-card/50 pl-12 pr-4 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-muted-foreground shadow-sm dark:bg-muted/40 dark:text-foreground dark:placeholder:text-muted-foreground/60"
             placeholder="Search tasks, subjects, or notes..."
           />
         </div>
@@ -203,17 +203,17 @@ export default function TasksPage() {
             <select 
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="w-full h-full rounded-2xl border border-border/60 bg-card/50 pl-12 pr-10 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all appearance-none shadow-sm font-medium"
+              className="w-full h-full rounded-2xl border border-border/60 bg-card/50 pl-12 pr-10 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all appearance-none shadow-sm font-medium dark:bg-muted/40 dark:text-foreground"
             >
-              <option value="all">All Priorities</option>
-              <option value="high">🔥 High Priority</option>
-              <option value="medium">⚡ Medium Priority</option>
-              <option value="low">🌱 Low Priority</option>
-              <option value="overdue">⏰ Overdue Only</option>
-              <option value="today">📅 Due Today</option>
-              <option value="upcoming">🚀 Upcoming</option>
+              <option value="all" className="dark:bg-neutral-900">All Priorities</option>
+              <option value="high" className="dark:bg-neutral-900">🔥 High Priority</option>
+              <option value="medium" className="dark:bg-neutral-900">⚡ Medium Priority</option>
+              <option value="low" className="dark:bg-neutral-900">🌱 Low Priority</option>
+              <option value="overdue" className="dark:bg-neutral-900">⏰ Overdue Only</option>
+              <option value="today" className="dark:bg-neutral-900">📅 Due Today</option>
+              <option value="upcoming" className="dark:bg-neutral-900">🚀 Upcoming</option>
             </select>
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground group-focus-within:text-primary transition-colors">
               <ChevronRight className="h-4 w-4 rotate-90" />
             </div>
           </div>
@@ -234,13 +234,13 @@ export default function TasksPage() {
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <ListTodo className="h-4 w-4 text-primary" /> Task Name
                   </label>
-                  <input name="title" required placeholder="e.g. Finish Math Assignment" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background transition-all outline-none" />
+                  <input name="title" required placeholder="e.g. Finish Math Assignment" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <Tag className="h-4 w-4 text-primary" /> Subject
                   </label>
-                  <input name="subject" required placeholder="e.g. Calculus" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background transition-all outline-none" />
+                  <input name="subject" required placeholder="e.g. Calculus" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
                 </div>
               </div>
 
@@ -249,22 +249,22 @@ export default function TasksPage() {
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <CalendarIcon className="h-4 w-4 text-primary" /> Due Date
                   </label>
-                  <input name="deadline" type="date" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background transition-all outline-none" />
+                  <input name="deadline" type="date" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <Clock className="h-4 w-4 text-primary" /> Time (Optional)
                   </label>
-                  <input name="due_time" type="time" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background transition-all outline-none" />
+                  <input name="due_time" type="time" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 text-primary" /> Priority
                   </label>
-                  <select name="priority" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background transition-all outline-none appearance-none">
-                    <option value="low">Low Priority</option>
-                    <option value="medium">Medium Priority</option>
-                    <option value="high">High Priority</option>
+                  <select name="priority" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none appearance-none">
+                    <option value="low" className="dark:bg-neutral-900">Low Priority</option>
+                    <option value="medium" className="dark:bg-neutral-900">Medium Priority</option>
+                    <option value="high" className="dark:bg-neutral-900">High Priority</option>
                   </select>
                 </div>
               </div>
@@ -344,14 +344,14 @@ function TaskCard({
     >
       {/* Swipe Backgrounds */}
       <motion.div 
-        style={{ background }}
-        className="absolute inset-0 flex items-center justify-between px-8 text-white font-black uppercase tracking-widest text-xs"
+        style={{ background, opacity }}
+        className="absolute inset-0 flex items-center justify-between px-6 md:px-8 text-white font-black uppercase tracking-widest text-[10px] md:text-xs pointer-events-none"
       >
         <div className="flex items-center gap-2">
-          <Trash2 className="h-5 w-5" /> Delete
+          <Trash2 className="h-4 w-4 md:h-5 w-5" /> <span className="hidden md:inline">Delete</span>
         </div>
-        <div className="flex items-center gap-2">
-          Complete <CheckCircle2 className="h-5 w-5" />
+        <div className="flex items-center gap-2 text-right">
+          <span className="hidden md:inline">Complete</span> <CheckCircle2 className="h-4 w-4 md:h-5 w-5" />
         </div>
       </motion.div>
 
@@ -366,9 +366,9 @@ function TaskCard({
         }}
         style={{ x }}
         className={cn(
-          "glass relative z-10 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 cursor-grab active:cursor-grabbing transition-colors duration-500",
+          "glass relative z-10 p-5 md:p-7 flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-8 cursor-grab active:cursor-grabbing transition-colors duration-500 dark:bg-zinc-900/90",
           task.status === "done" && "bg-muted/30 opacity-70",
-          isOverdue && "border-red-500/30 bg-red-500/[0.02]"
+          isOverdue && "border-red-500/30 bg-red-500/[0.02] dark:bg-red-500/10"
         )}
       >
         <div className="flex items-start gap-5 flex-1 min-w-0">
@@ -379,8 +379,8 @@ function TaskCard({
               task.status === "done" 
                 ? "bg-emerald-500 border-emerald-500 text-white rotate-[360deg]" 
                 : isOverdue 
-                  ? "border-red-500/50 bg-red-500/5 text-red-500" 
-                  : "border-border/60 hover:border-primary hover:bg-primary/5"
+                  ? "border-red-500/50 bg-red-500/10 text-red-500 dark:bg-red-500/20 dark:text-red-400" 
+                  : "border-border/60 hover:border-primary hover:bg-primary/5 dark:hover:bg-primary/20"
             )}
           >
             {task.status === "done" ? <CheckCircle2 className="h-6 w-6" /> : isOverdue ? <AlertCircle className="h-6 w-6" /> : <div className="h-2 w-2 rounded-full bg-border group-hover:bg-primary transition-colors" />}
@@ -389,30 +389,30 @@ function TaskCard({
           <div className="space-y-1.5 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className={cn(
-                "text-xl font-bold truncate transition-all duration-500",
-                task.status === "done" && "line-through text-muted-foreground decoration-2",
-                isOverdue && "text-red-600"
+                "text-lg md:text-xl font-bold truncate transition-all duration-500",
+                task.status === "done" ? "line-through text-muted-foreground decoration-2" : "text-foreground",
+                isOverdue && "text-red-500 dark:text-red-400"
               )}>
                 {task.title}
               </h3>
               {isOverdue && (
-                <span className="px-2 py-0.5 rounded-full bg-red-500 text-[10px] font-black text-white uppercase tracking-tighter animate-pulse">
+                <span className="shrink-0 px-2 py-0.5 rounded-full bg-red-500 text-[10px] font-black text-white uppercase tracking-tighter animate-pulse">
                   Overdue
                 </span>
               )}
             </div>
             
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-primary/10 text-primary text-xs font-bold uppercase tracking-wider">
+            <div className="flex flex-wrap items-center gap-2 md:gap-4">
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-primary/10 text-primary dark:bg-primary/25 dark:text-indigo-300 text-[10px] md:text-xs font-bold uppercase tracking-wider border border-primary/10">
                 <Tag className="h-3 w-3" /> {task.subject}
               </span>
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+              <span className="flex items-center gap-1.5 text-[10px] md:text-xs text-muted-foreground font-semibold">
                 <Clock className="h-3.5 w-3.5" /> {task.estimated_hours}h
               </span>
               {task.deadline && (
                 <span className={cn(
-                  "flex items-center gap-1.5 text-xs font-bold",
-                  isOverdue ? "text-red-500" : "text-muted-foreground"
+                  "flex items-center gap-1.5 text-[10px] md:text-xs font-bold",
+                  isOverdue ? "text-red-500 dark:text-red-400" : "text-muted-foreground"
                 )}>
                   <CalendarDays className="h-3.5 w-3.5" /> 
                   {new Date(task.deadline).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}
@@ -420,10 +420,10 @@ function TaskCard({
                 </span>
               )}
               <span className={cn(
-                "px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest",
-                task.priority === "high" ? "bg-red-500/10 text-red-500" : 
-                task.priority === "medium" ? "bg-amber-500/10 text-amber-500" : 
-                "bg-blue-500/10 text-blue-500"
+                "px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border",
+                task.priority === "high" ? "bg-red-500/10 text-red-500 border-red-500/20 dark:bg-red-500/30 dark:text-red-300 dark:border-red-500/40" : 
+                task.priority === "medium" ? "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:bg-amber-500/30 dark:text-amber-300 dark:border-amber-500/40" : 
+                "bg-blue-500/10 text-blue-500 border-blue-500/20 dark:bg-blue-500/30 dark:text-blue-300 dark:border-blue-500/40"
               )}>
                 {task.priority}
               </span>
@@ -432,20 +432,20 @@ function TaskCard({
         </div>
 
         {/* Action Suggestions / Reschedule */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0 ml-auto md:ml-0">
           {isOverdue && (
-            <div className="flex flex-col gap-2 md:flex-row items-center">
+            <div className="flex flex-row items-center gap-2">
               <span className="text-[10px] font-bold text-muted-foreground hidden lg:block uppercase tracking-widest">Reschedule?</span>
               <div className="flex gap-1.5">
                 <button 
                   onClick={() => onReschedule(1)}
-                  className="px-4 py-2 rounded-xl bg-muted/80 text-[10px] font-bold hover:bg-muted transition-all uppercase tracking-wider"
+                  className="px-3 py-1.5 md:px-4 md:py-2 rounded-xl bg-muted/80 dark:bg-muted/40 text-[10px] font-bold hover:bg-muted transition-all uppercase tracking-wider"
                 >
                   Tomorrow
                 </button>
                 <button 
                   onClick={() => onReschedule(7)}
-                  className="px-4 py-2 rounded-xl bg-muted/80 text-[10px] font-bold hover:bg-muted transition-all uppercase tracking-wider"
+                  className="px-3 py-1.5 md:px-4 md:py-2 rounded-xl bg-muted/80 dark:bg-muted/40 text-[10px] font-bold hover:bg-muted transition-all uppercase tracking-wider"
                 >
                   Next Week
                 </button>
@@ -455,9 +455,10 @@ function TaskCard({
           
           <button 
             onClick={onDelete}
-            className="p-3 rounded-2xl border border-border/40 text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100 hidden md:block"
+            className="p-2.5 md:p-3 rounded-2xl border border-border/40 text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-all md:opacity-0 md:group-hover:opacity-100"
+            title="Delete task"
           >
-            <Trash2 className="h-5 w-5" />
+            <Trash2 className="h-4 w-4 md:h-5 w-5" />
           </button>
         </div>
       </motion.div>
