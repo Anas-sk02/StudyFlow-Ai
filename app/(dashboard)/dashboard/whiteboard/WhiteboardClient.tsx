@@ -230,6 +230,124 @@ export default function WhiteboardClient() {
     }
   }, [mounted, currentBoardId]);
 
+  // Bind manual non-passive touch listeners to canvas to prevent Chrome Android gesture conflicts
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleTouchStartRaw = (e: TouchEvent) => {
+      // Call e.preventDefault to completely block pull-to-refresh or back navigation
+      e.preventDefault();
+      
+      if (tool === 'pan') {
+        if (e.touches.length > 0) {
+          startPanning(e.touches[0].clientX, e.touches[0].clientY);
+        }
+        return;
+      }
+
+      const rect = canvas.getBoundingClientRect();
+      const activeZoom = zoom || 1;
+      if (e.touches.length === 0) return;
+      const coords = {
+        x: (e.touches[0].clientX - rect.left) / activeZoom,
+        y: (e.touches[0].clientY - rect.top) / activeZoom
+      };
+
+      if (tool === 'text') {
+        handleTextSpawn(coords.x, coords.y);
+        return;
+      }
+
+      setIsDrawing(true);
+      const newAction: CanvasAction = {
+        type: tool === 'eraser' ? 'erase' : 'draw',
+        points: [coords],
+        color: strokeColor,
+        size: strokeSize,
+      };
+      currentActionRef.current = newAction;
+    };
+
+    const handleTouchMoveRaw = (e: TouchEvent) => {
+      e.preventDefault();
+      if (tool === 'pan') {
+        if (isPanning && e.touches.length > 0) {
+          pan(e.touches[0].clientX, e.touches[0].clientY);
+        }
+        return;
+      }
+
+      if (!isDrawing || !currentActionRef.current) return;
+      const rect = canvas.getBoundingClientRect();
+      const activeZoom = zoom || 1;
+      if (e.touches.length === 0) return;
+      const coords = {
+        x: (e.touches[0].clientX - rect.left) / activeZoom,
+        y: (e.touches[0].clientY - rect.top) / activeZoom
+      };
+
+      const action = currentActionRef.current;
+      if (action.type === 'draw' || action.type === 'erase') {
+        action.points.push(coords);
+        
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const p1 = action.points[action.points.length - 2];
+          const p2 = coords;
+          
+          ctx.beginPath();
+          ctx.lineWidth = action.size;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          
+          if (action.type === 'erase') {
+            ctx.globalCompositeOperation = 'destination-out';
+          } else {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = action.color;
+          }
+          
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+        }
+      }
+    };
+
+    const handleTouchEndRaw = (e: TouchEvent) => {
+      e.preventDefault();
+      if (tool === 'pan') {
+        stopPanning();
+        return;
+      }
+
+      if (!isDrawing) return;
+      setIsDrawing(false);
+
+      if (currentActionRef.current) {
+        const updatedActions = [...actionsRef.current, currentActionRef.current];
+        setActions(updatedActions);
+        setRedoStack([]);
+        currentActionRef.current = null;
+        
+        // Save board state
+        saveBoardState(updatedActions);
+      }
+    };
+
+    // Bind event listeners with { passive: false } explicitly!
+    canvas.addEventListener('touchstart', handleTouchStartRaw, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMoveRaw, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEndRaw, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('touchstart', handleTouchStartRaw);
+      canvas.removeEventListener('touchmove', handleTouchMoveRaw);
+      canvas.removeEventListener('touchend', handleTouchEndRaw);
+    };
+  }, [mounted, tool, strokeColor, strokeSize, isDrawing, isPanning, zoom]);
+
   // 2. Automatically redraw canvas whenever actions update
   useEffect(() => {
     if (!mounted) return;
@@ -1009,7 +1127,7 @@ export default function WhiteboardClient() {
             <div
               ref={containerRef}
               className={cn(
-                "relative w-full h-[580px] md:h-[680px] rounded-[2.2rem] border overflow-hidden shadow-2xl transition-all duration-300",
+                "relative w-full h-[460px] sm:h-[580px] md:h-[680px] rounded-[2.2rem] border overflow-hidden shadow-2xl transition-all duration-300",
                 bgMode === 'whiteboard' 
                   ? "bg-white border-slate-200/80 shadow-slate-900/5 text-slate-900" 
                   : "bg-[#0b0f19] border-neutral-800 shadow-black/60 text-slate-100"
@@ -1051,9 +1169,6 @@ export default function WhiteboardClient() {
                       onMouseMove={draw}
                       onMouseUp={stopDrawing}
                       onMouseLeave={stopDrawing}
-                      onTouchStart={startDrawing}
-                      onTouchMove={draw}
-                      onTouchEnd={stopDrawing}
                       className={cn(
                         "absolute inset-0 z-10 touch-none",
                         tool === 'pan' 
