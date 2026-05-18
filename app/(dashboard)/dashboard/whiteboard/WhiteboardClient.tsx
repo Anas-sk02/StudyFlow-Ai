@@ -95,6 +95,9 @@ export default function WhiteboardClient() {
   // Zoom engine state (ranges from 0.5 to 2.0)
   const [zoom, setZoom] = useState<number>(1);
 
+  // Dynamic board bounds sizing (mobile protection: 1200x1200px, desktop: 3200x3200px)
+  const [boardSize, setBoardSize] = useState<number>(3200);
+
   // Multi-board state management
   const [boards, setBoards] = useState<SavedBoard[]>([]);
   const [currentBoardId, setCurrentBoardId] = useState<string>("");
@@ -172,6 +175,9 @@ export default function WhiteboardClient() {
   // 1. Initial Load & Setup (runs once on client mount)
   useEffect(() => {
     setMounted(true);
+
+    const isMobile = checkIsMobile();
+    setBoardSize(isMobile ? 1200 : 3200);
 
     // Load saved boards from localStorage
     const saved = localStorage.getItem("studyflow_boards");
@@ -294,22 +300,20 @@ export default function WhiteboardClient() {
     drawActionsOnCanvas(ctx, actionsRef.current);
   };
 
-  // Resize handler - set logical canvas coordinate bounds (3200x3200) for sharp retina rendering
+  // Resize handler - set logical canvas coordinate bounds for sharp retina rendering
   const handleResize = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const width = 3200;
-    const height = 3200;
-    
-    // Protect graphics memory on mobile viewports (Max limit in Safari/Chrome iOS/Android)
+    // Use current boardSize (which will be 1200 on mobile, 3200 on desktop)
     const isMobile = checkIsMobile();
+    const activeSize = isMobile ? 1200 : 3200;
     const dpr = isMobile ? 1.0 : Math.min(window.devicePixelRatio || 1, 2.0);
     
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
+    canvas.width = activeSize * dpr;
+    canvas.height = activeSize * dpr;
+    canvas.style.width = `${activeSize}px`;
+    canvas.style.height = `${activeSize}px`;
 
     const ctx = canvas.getContext('2d');
     if (ctx) {
@@ -1022,16 +1026,16 @@ export default function WhiteboardClient() {
                 {/* Scroll boundaries adjusted wrapper */}
                 <div
                   style={{
-                    width: `${3200 * zoom}px`,
-                    height: `${3200 * zoom}px`,
+                    width: `${boardSize * zoom}px`,
+                    height: `${boardSize * zoom}px`,
                     position: 'relative'
                   }}
                 >
                   <div
                     className="absolute inset-0"
                     style={{
-                      width: '3200px',
-                      height: '3200px',
+                      width: `${boardSize}px`,
+                      height: `${boardSize}px`,
                       backgroundImage: bgMode === 'whiteboard'
                         ? 'radial-gradient(rgba(15, 23, 42, 0.08) 1.5px, transparent 1.5px)'
                         : 'radial-gradient(rgba(99, 102, 241, 0.15) 1.5px, transparent 1.5px)',
