@@ -158,23 +158,7 @@ export default function WhiteboardClient() {
     );
   };
 
-  // Temporary mobile runtime debugger console (loads automatically on mount)
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/eruda";
-    script.onload = () => {
-      // @ts-ignore
-      if (window.eruda) window.eruda.init();
-    };
-    document.body.appendChild(script);
 
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, []);
 
   // 1. Initial Load & Setup (runs once on client mount)
   useEffect(() => {
