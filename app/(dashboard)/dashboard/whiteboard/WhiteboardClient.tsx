@@ -98,6 +98,10 @@ export default function WhiteboardClient() {
   // Dynamic board bounds sizing (mobile protection: 1200x1200px, desktop: 3200x3200px)
   const [boardSize, setBoardSize] = useState<number>(3200);
 
+  // Premium Mobile UX optimization states
+  const [dismissedMobilePrompt, setDismissedMobilePrompt] = useState<boolean>(true);
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState<boolean>(false);
+
   // Multi-board state management
   const [boards, setBoards] = useState<SavedBoard[]>([]);
   const [currentBoardId, setCurrentBoardId] = useState<string>("");
@@ -178,6 +182,14 @@ export default function WhiteboardClient() {
 
     const isMobile = checkIsMobile();
     setBoardSize(isMobile ? 1200 : 3200);
+
+    if (isMobile) {
+      setIsSidebarOpen(false); // Collapsed drawer by default on mobile for zero clutter
+      const alreadyDismissed = sessionStorage.getItem("dismissed_whiteboard_prompt");
+      if (!alreadyDismissed) {
+        setDismissedMobilePrompt(false);
+      }
+    }
 
     // Load saved boards from localStorage
     const saved = localStorage.getItem("studyflow_boards");
@@ -1213,8 +1225,8 @@ export default function WhiteboardClient() {
                 </div>
               </div>
 
-              {/* Active Board HUD Indicator */}
-              <div className="absolute top-6 left-6 z-25 flex items-center gap-3 pointer-events-none select-none">
+              {/* Active Board HUD Indicator (Hidden on Mobile) */}
+              <div className="hidden sm:flex absolute top-6 left-6 z-25 items-center gap-3 pointer-events-none select-none">
                 <div className={cn(
                   "px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-wider backdrop-blur-xl border shadow-sm font-sans",
                   bgMode === 'whiteboard' 
@@ -1261,8 +1273,9 @@ export default function WhiteboardClient() {
 
               {/* Floating control toolbar (collapsible & responsive) */}
               <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 w-[95%] max-w-[820px] flex items-center justify-center px-4">
+                {/* Desktop Toolbar (Hidden on Mobile) */}
                 <div className={cn(
-                  "w-full glass rounded-3xl py-3 px-4 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xl backdrop-blur-2xl border",
+                  "hidden md:flex w-full glass rounded-3xl py-3 px-4 flex-col md:flex-row items-center justify-between gap-3 shadow-2xl backdrop-blur-2xl border",
                   bgMode === 'whiteboard'
                     ? "bg-white/90 border-slate-200/60 shadow-slate-900/10 text-slate-900"
                     : "bg-[#0b0f19]/90 border-neutral-800/80 shadow-black/88 text-white"
@@ -1422,6 +1435,172 @@ export default function WhiteboardClient() {
                     </button>
                   </div>
                 </div>
+
+                {/* Mobile Collapsible & Thumb-friendly Toolbar (Visible only on Mobile) */}
+                <div className={cn(
+                  "flex md:hidden items-center justify-between w-full glass rounded-3xl py-2 px-3 gap-2 shadow-2xl border backdrop-blur-xl",
+                  bgMode === 'whiteboard'
+                    ? "bg-white/95 border-slate-200 text-slate-900 shadow-slate-900/5"
+                    : "bg-[#0b0f19]/95 border-neutral-800 text-white shadow-black/60"
+                )}>
+                  {/* Tools Group */}
+                  <div className="flex items-center gap-0.5 bg-muted/20 p-1 rounded-xl">
+                    <button
+                      onClick={() => setTool('pen')}
+                      className={cn(
+                        "h-8.5 w-8.5 rounded-lg flex items-center justify-center transition-all cursor-pointer",
+                        tool === 'pen' ? "bg-primary text-primary-foreground shadow-sm scale-105" : "text-muted-foreground hover:text-foreground"
+                      )}
+                      title="Pen tool"
+                    >
+                      <PenTool className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setTool('eraser')}
+                      className={cn(
+                        "h-8.5 w-8.5 rounded-lg flex items-center justify-center transition-all cursor-pointer",
+                        tool === 'eraser' ? "bg-primary text-primary-foreground shadow-sm scale-105" : "text-muted-foreground hover:text-foreground"
+                      )}
+                      title="Eraser tool"
+                    >
+                      <Eraser className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setTool('pan')}
+                      className={cn(
+                        "h-8.5 w-8.5 rounded-lg flex items-center justify-center transition-all cursor-pointer",
+                        tool === 'pan' ? "bg-primary text-primary-foreground shadow-sm scale-105" : "text-muted-foreground hover:text-foreground"
+                      )}
+                      title="Pan tool"
+                    >
+                      <Hand className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* Toggle style drawer button */}
+                  <button
+                    onClick={() => setMobileSettingsOpen(!mobileSettingsOpen)}
+                    className={cn(
+                      "h-8.5 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-all border border-border/60 text-[10px] font-extrabold uppercase tracking-wider cursor-pointer font-sans",
+                      mobileSettingsOpen
+                        ? "bg-indigo-500/10 text-indigo-500 border-indigo-500/30"
+                        : bgMode === 'whiteboard' ? "text-slate-700 bg-slate-100" : "text-slate-300 bg-neutral-800"
+                    )}
+                  >
+                    <Palette className="h-3.5 w-3.5 text-indigo-500" />
+                    <span>Style</span>
+                  </button>
+
+                  {/* Quick Undo / Redo */}
+                  <div className="flex items-center gap-0.5 bg-muted/20 p-1 rounded-xl">
+                    <button
+                      onClick={handleUndo}
+                      disabled={actions.length === 0}
+                      className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground disabled:opacity-30 cursor-pointer"
+                      title="Undo"
+                    >
+                      <Undo2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={handleRedo}
+                      disabled={redoStack.length === 0}
+                      className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground disabled:opacity-30 cursor-pointer"
+                      title="Redo"
+                    >
+                      <Redo2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Collapsible Mobile Customizer Sub-Drawer */}
+                <AnimatePresence>
+                  {mobileSettingsOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 12, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 12, scale: 0.95 }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      className={cn(
+                        "absolute bottom-[4.2rem] left-0 right-0 mx-auto w-[94%] rounded-2xl p-4 border shadow-2xl backdrop-blur-2xl flex flex-col gap-3.5 z-35",
+                        bgMode === 'whiteboard'
+                          ? "bg-white/95 border-slate-200 text-slate-900"
+                          : "bg-[#0b0f19]/95 border-neutral-800 text-white"
+                      )}
+                    >
+                      {/* Drawer Header */}
+                      <div className="flex items-center justify-between border-b border-border/40 pb-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-500 font-sans">Palette & Stroke Settings</span>
+                        <button
+                          onClick={() => setMobileSettingsOpen(false)}
+                          className="text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Colors Palette Section */}
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-black font-sans">Brush Color</span>
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          {tool !== 'eraser' ? (
+                            colors.map((color) => (
+                              <button
+                                key={color.hex}
+                                onClick={() => setStrokeColor(color.hex)}
+                                className={cn(
+                                  "h-6.5 w-6.5 rounded-full border-2 transition-all hover:scale-110 relative flex items-center justify-center shadow-sm cursor-pointer",
+                                  strokeColor === color.hex ? "scale-105" : "border-transparent"
+                                )}
+                                style={{ 
+                                  backgroundColor: color.hex,
+                                  borderColor: strokeColor === color.hex ? (bgMode === 'whiteboard' ? '#0f172a' : '#ffffff') : 'transparent'
+                                }}
+                              >
+                                {strokeColor === color.hex && (
+                                  <span 
+                                    className="h-1.5 w-1.5 rounded-full" 
+                                    style={{ 
+                                      backgroundColor: bgMode === 'whiteboard' && color.hex === '#0f172a' ? '#ffffff' : '#0f172a' 
+                                    }} 
+                                  />
+                                )}
+                              </button>
+                            ))
+                          ) : (
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground py-1 px-2.5 bg-muted/40 rounded-lg font-sans">
+                              Eraser tool has no color
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Stroke Weight Section */}
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-black font-sans">Stroke Weight</span>
+                        <div className="flex items-center gap-1 bg-muted/20 p-1 rounded-xl self-start">
+                          {[
+                            { size: 2, label: 'Thin' },
+                            { size: 5, label: 'Medium' },
+                            { size: 10, label: 'Thick' }
+                          ].map((s) => (
+                            <button
+                              key={s.size}
+                              onClick={() => setStrokeSize(s.size)}
+                              className={cn(
+                                "h-7.5 px-3 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer font-sans",
+                                strokeSize === s.size
+                                  ? "bg-primary/10 text-primary font-black"
+                                  : "text-muted-foreground hover:text-foreground"
+                              )}
+                            >
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
             </div>
@@ -1447,6 +1626,47 @@ export default function WhiteboardClient() {
 
         </div>
       </div>
+      {/* Premium Desktop Recommendation Modal for Mobile Users */}
+      <AnimatePresence>
+        {!dismissedMobilePrompt && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-xl"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="max-w-sm w-full glass rounded-3xl p-6 border border-border/80 shadow-2xl bg-card/60 backdrop-blur-2xl flex flex-col items-center text-center space-y-6"
+            >
+              <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-inner">
+                <Palette className="h-8 w-8 text-indigo-500" />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary to-indigo-500 font-sans">
+                  Best Studio Experience
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed font-sans">
+                  ✨ For the best whiteboard and infinite canvas experience, please use <span className="font-semibold text-foreground">StudyFlow AI</span> on a laptop or desktop.
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setDismissedMobilePrompt(true);
+                  sessionStorage.setItem("dismissed_whiteboard_prompt", "true");
+                }}
+                className="w-full py-3 rounded-2xl bg-primary text-primary-foreground hover:opacity-90 text-sm font-bold shadow-lg shadow-primary/15 transition-all cursor-pointer font-sans"
+              >
+                Continue Anyway
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
