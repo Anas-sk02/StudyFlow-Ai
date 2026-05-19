@@ -85,6 +85,8 @@ export function DashboardShell({ children, user }: { children: React.ReactNode, 
   }, [pathname]);
 
   const handleLogout = async () => {
+    setIsProfileOpen(false);
+    setIsMobileOpen(false);
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");

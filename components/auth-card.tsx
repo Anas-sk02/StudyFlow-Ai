@@ -51,6 +51,21 @@ export default function AuthCard() {
         router.push("/dashboard");
         router.refresh();
       } else {
+        // Check if user already exists
+        const { data: existingProfile, error: profileError } = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("email", emailVal)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("Error checking profile:", profileError);
+        }
+
+        if (existingProfile) {
+          throw new Error("An account with this email already exists. Please log in.");
+        }
+
         // Hybrid Signup: Use OTP for verification, then set password
         const { error } = await supabase.auth.signInWithOtp({
           email: emailVal,
