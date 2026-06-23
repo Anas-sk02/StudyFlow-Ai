@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { generateJSON } from "@/lib/ai";
 import { requireAuth } from "@/lib/api-auth";
-import pdf from "pdf-parse";
+import pdf from "pdf-parse/lib/pdf-parse";
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 const MAX_TEXT_LENGTH = 15000;

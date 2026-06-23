@@ -2,15 +2,30 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { NextResponse } from "next/server";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error("Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY");
+let resendInstance: Resend | null = null;
+function getResend() {
+  if (!resendInstance) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error("Missing RESEND_API_KEY");
+    }
+    resendInstance = new Resend(apiKey);
+  }
+  return resendInstance;
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+let supabaseInstance: ReturnType<typeof createClient> | null = null;
+function getSupabase(): any {
+  if (!supabaseInstance) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) {
+      throw new Error("Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY");
+    }
+    supabaseInstance = createClient(url, key);
+  }
+  return supabaseInstance;
+}
 
 export async function GET(req: Request) {
   // Secure auth check — fail closed if CRON_SECRET is not configured
@@ -30,7 +45,7 @@ export async function GET(req: Request) {
     
     // Fetch incomplete tasks with deadlines near the target time
     // We filter for tasks where reminder_sent is false
-    const { data: tasks, error: tasksError } = await supabase
+    const { data: tasks, error: tasksError } = await getSupabase()
       .from("study_tasks")
       .select("*, profiles(email, full_name)")
       .eq("status", "todo")
@@ -59,7 +74,7 @@ export async function GET(req: Request) {
         if (!userEmail) continue;
 
         try {
-          await resend.emails.send({
+          await getResend().emails.send({
             from: "StudyFlow AI <reminders@studyflow.ai>",
             to: userEmail,
             subject: `Reminder: ${task.title} is due in 8 hours!`,
@@ -78,7 +93,7 @@ export async function GET(req: Request) {
           });
 
           // Mark as sent
-          await supabase
+          await getSupabase()
             .from("study_tasks")
             .update({ reminder_sent: true })
             .eq("id", task.id);
