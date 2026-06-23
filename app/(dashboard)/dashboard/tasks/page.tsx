@@ -21,12 +21,14 @@ import {
 } from "lucide-react";
 import { createClient } from "@/supabase/client";
 import type { StudyTask } from "@/lib/types";
-import { createTaskAction } from "./actions";
+import { createTaskAction, toggleTaskAction, deleteTaskAction, rescheduleTaskAction } from "./actions";
 import { cn } from "@/lib/utils";
+import { TaskCardSkeleton } from "@/components/ui/skeleton";
 
 export default function TasksPage() {
   const supabase = createClient();
   const [tasks, setTasks] = useState<StudyTask[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [isAdding, setIsAdding] = useState(false);
@@ -34,6 +36,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true);
       const { data, error } = await supabase
         .from("study_tasks")
         .select("*")
@@ -43,6 +46,7 @@ export default function TasksPage() {
         return;
       }
       setTasks((data || []) as StudyTask[]);
+      setLoading(false);
     };
     void load();
   }, [supabase]);
@@ -110,19 +114,19 @@ export default function TasksPage() {
 
   async function toggleDone(task: StudyTask): Promise<void> {
     const next = task.status === "done" ? "todo" : "done";
-    const { error } = await supabase.from("study_tasks").update({ status: next }).eq("id", task.id);
-    if (error) {
-      toast.error(error.message);
+    const result = await toggleTaskAction(task.id);
+    if (result.error) {
+      toast.error(result.error);
       return;
     }
-    setTasks((old) => old.map((t) => (t.id === task.id ? { ...t, status: next } : t)));
+    setTasks((old) => old.map((t) => (t.id === task.id ? { ...t, status: next as typeof task.status, completed_at: (result.data as { completed_at: string | null })?.completed_at } : t)));
     toast.success(next === "done" ? "Task completed!" : "Task restored.");
   }
 
   async function deleteTask(id: string): Promise<void> {
-    const { error } = await supabase.from("study_tasks").delete().eq("id", id);
-    if (error) {
-      toast.error(error.message);
+    const result = await deleteTaskAction(id);
+    if (result.error) {
+      toast.error(result.error);
       return;
     }
     setTasks((old) => old.filter((t) => t.id !== id));
@@ -130,17 +134,14 @@ export default function TasksPage() {
   }
 
   async function rescheduleTask(id: string, days: number): Promise<void> {
-    const newDate = new Date();
-    newDate.setDate(newDate.getDate() + days);
-    const deadline = newDate.toISOString().split('T')[0];
-    
-    const { error } = await supabase.from("study_tasks").update({ deadline }).eq("id", id);
-    if (error) {
-      toast.error(error.message);
+    const result = await rescheduleTaskAction(id, days);
+    if (result.error) {
+      toast.error(result.error);
       return;
     }
+    const { deadline } = result.data as { deadline: string };
     setTasks((old) => old.map(t => t.id === id ? { ...t, deadline } : t));
-    toast.success(`Rescheduled to ${newDate.toLocaleDateString()}`);
+    toast.success(`Rescheduled to ${new Date(deadline + "T00:00:00").toLocaleDateString()}`);
   }
 
   return (
@@ -282,7 +283,13 @@ export default function TasksPage() {
 
       {/* Tasks List */}
       <div className="space-y-4">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <TaskCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="text-center py-20 glass rounded-[3rem] border-dashed border-2 border-border/40">
             <div className="w-24 h-24 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-6">
               <CalendarClock className="h-10 w-10 text-muted-foreground/50" />

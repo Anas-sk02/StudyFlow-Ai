@@ -1,30 +1,37 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { 
-  PenTool, 
-  Eraser, 
-  Type, 
-  Trash2, 
-  Undo2, 
-  Redo2, 
-  Download, 
-  Plus, 
-  ChevronLeft, 
-  ChevronRight, 
-  FileText, 
-  Edit3, 
-  Check, 
-  X, 
-  Palette, 
+import { createClient } from "@/supabase/client";
+import {
+  PenTool,
+  Eraser,
+  Type,
+  Trash2,
+  Undo2,
+  Redo2,
+  Download,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Edit3,
+  Check,
+  X,
+  Palette,
   Monitor,
   HelpCircle,
   Save,
   Hand,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  Square,
+  Circle,
+  Minus,
+  ArrowRight,
+  ChevronDown,
+  CloudUpload
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -50,55 +57,110 @@ interface TextAction {
   size: number;
 }
 
-type CanvasAction = DrawAction | TextAction;
+interface ShapeAction {
+  type: 'rect' | 'circle' | 'line' | 'arrow';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  size: number;
+  filled?: boolean;
+}
+
+type CanvasAction = DrawAction | TextAction | ShapeAction;
 
 interface SavedBoard {
   id: string;
   name: string;
   actions: CanvasAction[];
   bgMode: 'whiteboard' | 'blackboard';
+  showGrid: boolean;
   createdAt: string;
 }
 
+// Shape tool options (used by the desktop dropdown + mobile selector)
+const SHAPE_OPTIONS = [
+  { type: 'rect' as const, icon: Square, label: 'Rectangle' },
+  { type: 'circle' as const, icon: Circle, label: 'Circle' },
+  { type: 'line' as const, icon: Minus, label: 'Line' },
+  { type: 'arrow' as const, icon: ArrowRight, label: 'Arrow' },
+];
+
+// Brush stroke size options (used by the desktop dropdown + mobile selector)
+const BRUSH_OPTIONS = [
+  { size: 2, label: 'Thin' },
+  { size: 5, label: 'Medium' },
+  { size: 10, label: 'Thick' },
+  { size: 18, label: 'Huge' },
+];
+
 export default function WhiteboardClient() {
+  // Supabase client for cloud sync
+  const supabase = useMemo(() => createClient(), []);
+
   // Canvas and workspace references
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const currentActionRef = useRef<CanvasAction | null>(null);
 
+  // Performance refs — used by touch/mouse handlers to avoid effect re-bindings
+  const toolRef = useRef<'pen' | 'eraser' | 'text' | 'pan' | 'shape'>('pen');
+  const isDrawingRef = useRef(false);
+  const zoomRef = useRef(1);
+  const isPanningRef = useRef(false);
+  const strokeColorRef = useRef('#ffffff');
+  const strokeSizeRef = useRef(5);
+  const shapeTypeRef = useRef<'rect' | 'circle' | 'line' | 'arrow'>('rect');
+
   // Core Whiteboard Settings state
-  const [tool, setTool] = useState<'pen' | 'eraser' | 'text' | 'pan'>('pen');
+  const [tool, setTool] = useState<'pen' | 'eraser' | 'text' | 'pan' | 'shape'>('pen');
+  const [shapeType, setShapeType] = useState<'rect' | 'circle' | 'line' | 'arrow'>('rect');
+  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
+  const [brushMenuOpen, setBrushMenuOpen] = useState(false);
   const [bgMode, setBgMode] = useState<'whiteboard' | 'blackboard'>('blackboard');
   const [strokeColor, setStrokeColor] = useState<string>('#ffffff');
   const [strokeSize, setStrokeSize] = useState<number>(5);
+  const [showGrid, setShowGrid] = useState<boolean>(true);
+
+  // Keep refs synchronized with state
+  useEffect(() => { toolRef.current = tool; }, [tool]);
+  useEffect(() => { strokeColorRef.current = strokeColor; }, [strokeColor]);
+  useEffect(() => { strokeSizeRef.current = strokeSize; }, [strokeSize]);
+  useEffect(() => { shapeTypeRef.current = shapeType; }, [shapeType]);
 
   // Drawing state
   const [isDrawing, setIsDrawing] = useState(false);
   const [actions, setActions] = useState<CanvasAction[]>([]);
   const [redoStack, setRedoStack] = useState<CanvasAction[]>([]);
-  
-  // High-performance actions reference to prevent stale closures inside global key handlers / resizes
+
+  // Keep isDrawing ref in sync
+  useEffect(() => { isDrawingRef.current = isDrawing; }, [isDrawing]);
+
+  // High-performance actions reference to prevent stale closures
   const actionsRef = useRef<CanvasAction[]>([]);
   useEffect(() => {
     actionsRef.current = actions;
   }, [actions]);
 
-  // Grab panning state for Miro / Excalidraw scroll UX
+  // Grab panning state
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef({ scrollLeft: 0, scrollTop: 0, clientX: 0, clientY: 0 });
+  useEffect(() => { isPanningRef.current = isPanning; }, [isPanning]);
 
-  // Custom direct text input state (persistent, mobile-optimized synchronous focus)
+  // Custom direct text input state
   const [typingState, setTypingState] = useState<{ x: number; y: number } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Zoom engine state (ranges from 0.5 to 2.0)
   const [zoom, setZoom] = useState<number>(1);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
-  // Dynamic board bounds sizing (mobile protection: 1200x1200px, desktop: 3200x3200px)
+  // Dynamic board bounds sizing
   const [boardSize, setBoardSize] = useState<number>(3200);
 
-  // Premium Mobile UX optimization states
+  // Mobile UX states
   const [dismissedMobilePrompt, setDismissedMobilePrompt] = useState<boolean>(true);
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState<boolean>(false);
 
@@ -109,6 +171,12 @@ export default function WhiteboardClient() {
   const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [mounted, setMounted] = useState(false);
+  const [cloudSyncing, setCloudSyncing] = useState(false);
+  const [lastCloudSave, setLastCloudSave] = useState<string | null>(null);
+
+  // Debounce refs for save operations
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const cloudSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Dynamically map colors based on the board background theme (Whiteboard/Blackboard)
   const colors = useMemo(() => {
@@ -168,48 +236,57 @@ export default function WhiteboardClient() {
     setBoardSize(isMobile ? 1200 : 3200);
 
     if (isMobile) {
-      setIsSidebarOpen(false); // Collapsed drawer by default on mobile for zero clutter
+      setIsSidebarOpen(false);
       const alreadyDismissed = sessionStorage.getItem("dismissed_whiteboard_prompt");
       if (!alreadyDismissed) {
         setDismissedMobilePrompt(false);
       }
     }
 
-    // Load saved boards from localStorage
-    const saved = localStorage.getItem("studyflow_boards");
-    let loadedBoards: SavedBoard[] = [];
-    
-    if (saved) {
-      try {
-        loadedBoards = JSON.parse(saved);
-        setBoards(loadedBoards);
-      } catch (e) {
-        console.error("Error parsing saved boards", e);
-      }
-    }
+    // Load saved boards from localStorage, then merge with cloud
+    const init = async () => {
+      const saved = localStorage.getItem("studyflow_boards");
+      let loadedBoards: SavedBoard[] = [];
 
-    // If no boards exist, create a default one
-    if (loadedBoards.length === 0) {
-      const defaultBoard: SavedBoard = {
-        id: "default-board-1",
-        name: "My First Canvas",
-        actions: [],
-        bgMode: 'blackboard',
-        createdAt: new Date().toISOString()
-      };
-      const initialList = [defaultBoard];
-      setBoards(initialList);
-      setCurrentBoardId(defaultBoard.id);
-      localStorage.setItem("studyflow_boards", JSON.stringify(initialList));
-      setBgMode(defaultBoard.bgMode);
-      setActions(defaultBoard.actions);
-    } else {
-      // Open the last saved or first board
-      const lastBoard = loadedBoards[0];
-      setCurrentBoardId(lastBoard.id);
-      setBgMode(lastBoard.bgMode);
-      setActions(lastBoard.actions);
-    }
+      if (saved) {
+        try {
+          loadedBoards = JSON.parse(saved);
+        } catch (e) {
+          console.error("Error parsing saved boards", e);
+        }
+      }
+
+      // Merge with cloud data
+      const mergedBoards = await loadCloudBoards(loadedBoards);
+
+      if (mergedBoards.length === 0) {
+        const defaultBoard: SavedBoard = {
+          id: "default-board-1",
+          name: "My First Canvas",
+          actions: [],
+          bgMode: 'blackboard',
+          showGrid: true,
+          createdAt: new Date().toISOString()
+        };
+        const initialList = [defaultBoard];
+        setBoards(initialList);
+        setCurrentBoardId(defaultBoard.id);
+        localStorage.setItem("studyflow_boards", JSON.stringify(initialList));
+        setBgMode(defaultBoard.bgMode);
+        setShowGrid(defaultBoard.showGrid ?? true);
+        setActions(defaultBoard.actions);
+      } else {
+        const firstBoard = mergedBoards[0];
+        setBoards(mergedBoards);
+        setCurrentBoardId(firstBoard.id);
+        setBgMode(firstBoard.bgMode);
+        setShowGrid(firstBoard.showGrid ?? true);
+        setActions(firstBoard.actions);
+        // Update localStorage with merged data
+        localStorage.setItem("studyflow_boards", JSON.stringify(mergedBoards));
+      }
+    };
+    void init();
 
     // Setup responsive canvas resize listener
     window.addEventListener("resize", handleResize);
@@ -226,16 +303,18 @@ export default function WhiteboardClient() {
     }
   }, [mounted, currentBoardId]);
 
-  // Bind manual non-passive touch listeners to canvas to prevent Chrome Android gesture conflicts
+  // Bind manual non-passive touch listeners to canvas
+  // FIXED: Uses refs instead of state to avoid rebinding on every stroke
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !mounted) return;
 
     const handleTouchStartRaw = (e: TouchEvent) => {
-      // Call e.preventDefault to completely block pull-to-refresh or back navigation
       e.preventDefault();
-      
-      if (tool === 'pan') {
+
+      const currentTool = toolRef.current;
+
+      if (currentTool === 'pan') {
         if (e.touches.length > 0) {
           startPanning(e.touches[0].clientX, e.touches[0].clientY);
         }
@@ -243,40 +322,59 @@ export default function WhiteboardClient() {
       }
 
       const rect = canvas.getBoundingClientRect();
-      const activeZoom = zoom || 1;
+      const activeZoom = zoomRef.current;
       if (e.touches.length === 0) return;
       const coords = {
         x: (e.touches[0].clientX - rect.left) / activeZoom,
         y: (e.touches[0].clientY - rect.top) / activeZoom
       };
 
-      if (tool === 'text') {
+      if (currentTool === 'text') {
         handleTextSpawn(coords.x, coords.y);
         return;
       }
 
+      if (currentTool === 'shape') {
+        setIsDrawing(true);
+        isDrawingRef.current = true;
+        const shapeAction: CanvasAction = {
+          type: shapeTypeRef.current,
+          x: coords.x,
+          y: coords.y,
+          width: 0,
+          height: 0,
+          color: strokeColorRef.current,
+          size: strokeSizeRef.current,
+        };
+        currentActionRef.current = shapeAction;
+        return;
+      }
+
       setIsDrawing(true);
+      isDrawingRef.current = true;
       const newAction: CanvasAction = {
-        type: tool === 'eraser' ? 'erase' : 'draw',
+        type: currentTool === 'eraser' ? 'erase' : 'draw',
         points: [coords],
-        color: strokeColor,
-        size: strokeSize,
+        color: strokeColorRef.current,
+        size: strokeSizeRef.current,
       };
       currentActionRef.current = newAction;
     };
 
     const handleTouchMoveRaw = (e: TouchEvent) => {
       e.preventDefault();
-      if (tool === 'pan') {
-        if (isPanning && e.touches.length > 0) {
+      const currentTool = toolRef.current;
+
+      if (currentTool === 'pan') {
+        if (isPanningRef.current && e.touches.length > 0) {
           pan(e.touches[0].clientX, e.touches[0].clientY);
         }
         return;
       }
 
-      if (!isDrawing || !currentActionRef.current) return;
+      if (!isDrawingRef.current || !currentActionRef.current) return;
       const rect = canvas.getBoundingClientRect();
-      const activeZoom = zoom || 1;
+      const activeZoom = zoomRef.current;
       if (e.touches.length === 0) return;
       const coords = {
         x: (e.touches[0].clientX - rect.left) / activeZoom,
@@ -284,26 +382,31 @@ export default function WhiteboardClient() {
       };
 
       const action = currentActionRef.current;
-      if (action.type === 'draw' || action.type === 'erase') {
+      if (action.type === 'rect' || action.type === 'circle' || action.type === 'line' || action.type === 'arrow') {
+        action.width = coords.x - action.x;
+        action.height = coords.y - action.y;
+        // Redraw to show shape preview
+        redrawCanvasWithPreview(action);
+      } else if (action.type === 'draw' || action.type === 'erase') {
         action.points.push(coords);
-        
+
         const ctx = canvas.getContext('2d');
         if (ctx) {
           const p1 = action.points[action.points.length - 2];
           const p2 = coords;
-          
+
           ctx.beginPath();
           ctx.lineWidth = action.size;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
-          
+
           if (action.type === 'erase') {
             ctx.globalCompositeOperation = 'destination-out';
           } else {
             ctx.globalCompositeOperation = 'source-over';
             ctx.strokeStyle = action.color;
           }
-          
+
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
           ctx.stroke();
@@ -313,26 +416,28 @@ export default function WhiteboardClient() {
 
     const handleTouchEndRaw = (e: TouchEvent) => {
       e.preventDefault();
-      if (tool === 'pan') {
+      const currentTool = toolRef.current;
+
+      if (currentTool === 'pan') {
         stopPanning();
         return;
       }
 
-      if (!isDrawing) return;
+      if (!isDrawingRef.current) return;
       setIsDrawing(false);
+      isDrawingRef.current = false;
 
       if (currentActionRef.current) {
-        const updatedActions = [...actionsRef.current, currentActionRef.current];
+        const completedAction = { ...currentActionRef.current };
+        const updatedActions = [...actionsRef.current, completedAction];
         setActions(updatedActions);
         setRedoStack([]);
         currentActionRef.current = null;
-        
-        // Save board state
+
         saveBoardState(updatedActions);
       }
     };
 
-    // Bind event listeners with { passive: false } explicitly!
     canvas.addEventListener('touchstart', handleTouchStartRaw, { passive: false });
     canvas.addEventListener('touchmove', handleTouchMoveRaw, { passive: false });
     canvas.addEventListener('touchend', handleTouchEndRaw, { passive: false });
@@ -342,7 +447,7 @@ export default function WhiteboardClient() {
       canvas.removeEventListener('touchmove', handleTouchMoveRaw);
       canvas.removeEventListener('touchend', handleTouchEndRaw);
     };
-  }, [mounted, tool, strokeColor, strokeSize, isDrawing, isPanning, zoom]);
+  }, [mounted]); // Only re-bind on mount — uses refs for all dynamic values
 
   // 2. Automatically redraw canvas whenever actions update
   useEffect(() => {
@@ -414,6 +519,18 @@ export default function WhiteboardClient() {
     drawActionsOnCanvas(ctx, actionsRef.current);
   };
 
+  // Preview shape while drawing
+  const redrawCanvasWithPreview = (previewAction: CanvasAction) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    // Redraw all committed actions
+    drawActionsOnCanvas(ctx, actionsRef.current);
+    // Draw preview shape on top
+    drawSingleAction(ctx, previewAction, true);
+  };
+
   // Resize handler - set logical canvas coordinate bounds for sharp retina rendering
   const handleResize = () => {
     const canvas = canvasRef.current;
@@ -438,59 +555,125 @@ export default function WhiteboardClient() {
     }
   };
 
+  // Draw a single action (used for both normal render and preview)
+  const drawSingleAction = (ctx: CanvasRenderingContext2D, action: CanvasAction, isPreview?: boolean) => {
+    if (isPreview) {
+      ctx.globalAlpha = 0.6;
+      if (action.type === 'rect' || action.type === 'circle' || action.type === 'line' || action.type === 'arrow') {
+        ctx.setLineDash([6, 4]);
+      }
+    }
+
+    if (action.type === 'draw' || action.type === 'erase') {
+      if (action.points.length === 0) return;
+      ctx.beginPath();
+      ctx.lineWidth = action.size;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      if (action.type === 'erase') {
+        ctx.globalCompositeOperation = 'destination-out';
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = action.color;
+      }
+
+      if (action.points.length === 1) {
+        ctx.arc(action.points[0].x, action.points[0].y, action.size / 2, 0, Math.PI * 2);
+        ctx.fillStyle = action.type === 'erase' ? 'transparent' : action.color;
+        ctx.fill();
+      } else {
+        ctx.moveTo(action.points[0].x, action.points[0].y);
+        let i;
+        for (i = 1; i < action.points.length - 2; i++) {
+          const xc = (action.points[i].x + action.points[i + 1].x) / 2;
+          const yc = (action.points[i].y + action.points[i + 1].y) / 2;
+          ctx.quadraticCurveTo(action.points[i].x, action.points[i].y, xc, yc);
+        }
+        if (action.points[i]) {
+          ctx.quadraticCurveTo(action.points[i].x, action.points[i].y, action.points[i + 1].x, action.points[i + 1].y);
+        }
+        ctx.stroke();
+      }
+    } else if (action.type === 'rect') {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = action.color;
+      ctx.lineWidth = action.size;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      const x = action.width >= 0 ? action.x : action.x + action.width;
+      const y = action.height >= 0 ? action.y : action.y + action.height;
+      const w = Math.abs(action.width);
+      const h = Math.abs(action.height);
+      if (action.filled) {
+        ctx.fillStyle = action.color + '20';
+        ctx.fillRect(x, y, w, h);
+      }
+      ctx.strokeRect(x, y, w, h);
+    } else if (action.type === 'circle') {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = action.color;
+      ctx.lineWidth = action.size;
+      const cx = action.x + action.width / 2;
+      const cy = action.y + action.height / 2;
+      const rx = Math.abs(action.width) / 2;
+      const ry = Math.abs(action.height) / 2;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      if (action.filled) {
+        ctx.fillStyle = action.color + '20';
+        ctx.fill();
+      }
+      ctx.stroke();
+    } else if (action.type === 'line' || action.type === 'arrow') {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = action.color;
+      ctx.lineWidth = action.size;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(action.x, action.y);
+      ctx.lineTo(action.x + action.width, action.y + action.height);
+      ctx.stroke();
+      // Arrowhead
+      if (action.type === 'arrow') {
+        const angle = Math.atan2(action.height, action.width);
+        const headLen = action.size * 3;
+        const ex = action.x + action.width;
+        const ey = action.y + action.height;
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(
+          ex - headLen * Math.cos(angle - Math.PI / 6),
+          ey - headLen * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(
+          ex - headLen * Math.cos(angle + Math.PI / 6),
+          ey - headLen * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.stroke();
+      }
+    } else if (action.type === 'text') {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = action.color;
+      ctx.font = `600 ${action.size}px sans-serif`;
+      ctx.textBaseline = 'top';
+      const lines = action.text.split('\n');
+      lines.forEach((line, index) => {
+        ctx.fillText(line, action.x, action.y + (index * action.size * 1.25));
+      });
+    }
+
+    if (isPreview) {
+      ctx.globalAlpha = 1;
+      ctx.setLineDash([]);
+    }
+  };
+
   // Draw operations
   const drawActionsOnCanvas = (ctx: CanvasRenderingContext2D, actionList: CanvasAction[]) => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    
-    actionList.forEach(action => {
-      if (action.type === 'draw' || action.type === 'erase') {
-        if (action.points.length === 0) return;
-        
-        ctx.beginPath();
-        ctx.lineWidth = action.size;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        
-        if (action.type === 'erase') {
-          ctx.globalCompositeOperation = 'destination-out';
-        } else {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.strokeStyle = action.color;
-        }
-        
-        if (action.points.length === 1) {
-          ctx.arc(action.points[0].x, action.points[0].y, action.size / 2, 0, Math.PI * 2);
-          ctx.fillStyle = action.type === 'erase' ? 'transparent' : action.color;
-          ctx.fill();
-        } else {
-          ctx.moveTo(action.points[0].x, action.points[0].y);
-          // Use quadratic curves for exceptionally smooth drawing (Excalidraw quality)
-          let i;
-          for (i = 1; i < action.points.length - 2; i++) {
-            const xc = (action.points[i].x + action.points[i + 1].x) / 2;
-            const yc = (action.points[i].y + action.points[i + 1].y) / 2;
-            ctx.quadraticCurveTo(action.points[i].x, action.points[i].y, xc, yc);
-          }
-          // Curve to the last point
-          if (action.points[i]) {
-            ctx.quadraticCurveTo(action.points[i].x, action.points[i].y, action.points[i + 1].x, action.points[i + 1].y);
-          }
-          ctx.stroke();
-        }
-      } else if (action.type === 'text') {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = action.color;
-        
-        // Match standard font sizes with smooth styling
-        ctx.font = `600 ${action.size}px sans-serif`;
-        ctx.textBaseline = 'top';
-        
-        const lines = action.text.split('\n');
-        lines.forEach((line, index) => {
-          ctx.fillText(line, action.x, action.y + (index * action.size * 1.25));
-        });
-      }
-    });
+    actionList.forEach(action => drawSingleAction(ctx, action));
   };
 
   // Panning grab-scroll logic for infinite board feeling
@@ -552,7 +735,7 @@ export default function WhiteboardClient() {
     }
   };
 
-  // Drawing event handlers
+  // Drawing event handlers (mouse)
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (tool === 'pan') {
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
@@ -565,23 +748,36 @@ export default function WhiteboardClient() {
     if (!coords) return;
 
     if (tool === 'text') {
-      // Prevent browser default action from stealing focus on laptop mouse clicks
-      if (!('touches' in e)) {
-        e.preventDefault();
-      }
-      // Instant Text Spawn Mode
+      if (!('touches' in e)) e.preventDefault();
       handleTextSpawn(coords.x, coords.y);
       return;
     }
 
+    if (tool === 'shape') {
+      if (!('touches' in e)) e.preventDefault();
+      setIsDrawing(true);
+      isDrawingRef.current = true;
+      const shapeAction: CanvasAction = {
+        type: shapeType,
+        x: coords.x,
+        y: coords.y,
+        width: 0,
+        height: 0,
+        color: strokeColor,
+        size: strokeSize,
+      };
+      currentActionRef.current = shapeAction;
+      return;
+    }
+
     setIsDrawing(true);
+    isDrawingRef.current = true;
     const newAction: CanvasAction = {
       type: tool === 'eraser' ? 'erase' : 'draw',
       points: [coords],
       color: strokeColor,
       size: strokeSize,
     };
-    
     currentActionRef.current = newAction;
   };
 
@@ -600,28 +796,33 @@ export default function WhiteboardClient() {
     if (!coords) return;
 
     const action = currentActionRef.current;
-    if (action.type === 'draw' || action.type === 'erase') {
+
+    if (action.type === 'rect' || action.type === 'circle' || action.type === 'line' || action.type === 'arrow') {
+      action.width = coords.x - action.x;
+      action.height = coords.y - action.y;
+      // Live shape preview
+      redrawCanvasWithPreview(action);
+    } else if (action.type === 'draw' || action.type === 'erase') {
       action.points.push(coords);
-      
-      // Perform immediate drawing segment for lag-free performance
+
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext('2d');
       if (ctx && canvas) {
         const p1 = action.points[action.points.length - 2];
         const p2 = coords;
-        
+
         ctx.beginPath();
         ctx.lineWidth = action.size;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        
+
         if (action.type === 'erase') {
           ctx.globalCompositeOperation = 'destination-out';
         } else {
           ctx.globalCompositeOperation = 'source-over';
           ctx.strokeStyle = action.color;
         }
-        
+
         ctx.moveTo(p1.x, p1.y);
         ctx.lineTo(p2.x, p2.y);
         ctx.stroke();
@@ -637,14 +838,15 @@ export default function WhiteboardClient() {
 
     if (!isDrawing) return;
     setIsDrawing(false);
+    isDrawingRef.current = false;
 
     if (currentActionRef.current) {
-      const updatedActions = [...actions, currentActionRef.current];
+      const completedAction = { ...currentActionRef.current };
+      const updatedActions = [...actions, completedAction];
       setActions(updatedActions);
-      setRedoStack([]); // reset redo history
+      setRedoStack([]);
       currentActionRef.current = null;
-      
-      // Auto save
+
       saveBoardState(updatedActions);
     }
   };
@@ -753,8 +955,9 @@ export default function WhiteboardClient() {
     }
   };
 
-  // Multi-Board Manager Operations
-  const saveBoardState = (updatedActions: CanvasAction[]) => {
+  // Debounced local + cloud save
+  const saveBoardState = useCallback((updatedActions: CanvasAction[]) => {
+    // Update boards list with latest actions
     const list: SavedBoard[] = boards.map(b => {
       if (b.id === currentBoardId) {
         return { ...b, actions: updatedActions, bgMode };
@@ -762,7 +965,87 @@ export default function WhiteboardClient() {
       return b;
     });
     setBoards(list);
-    localStorage.setItem("studyflow_boards", JSON.stringify(list));
+
+    // Debounced localStorage save (prevents jank on rapid strokes)
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      localStorage.setItem("studyflow_boards", JSON.stringify(list));
+    }, 500);
+
+    // Debounced cloud sync to Supabase
+    if (cloudSaveTimeoutRef.current) clearTimeout(cloudSaveTimeoutRef.current);
+    cloudSaveTimeoutRef.current = setTimeout(() => {
+      void syncToCloud(list);
+    }, 2000);
+  }, [boards, currentBoardId, bgMode, supabase]);
+
+  // Cloud sync — save current board to Supabase whiteboards table
+  const syncToCloud = async (list?: SavedBoard[]) => {
+    const boardList = list || boards;
+    const board = boardList.find(b => b.id === currentBoardId);
+    if (!board) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      setCloudSyncing(true);
+      const { error } = await supabase
+        .from("whiteboards")
+        .upsert({
+          id: board.id,
+          user_id: user.id,
+          name: board.name,
+          actions: board.actions,
+          bg_mode: board.bgMode,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+
+      if (!error) {
+        setLastCloudSave(new Date().toLocaleTimeString());
+      }
+    } catch {
+      // Silently fail — localStorage is the primary store
+    } finally {
+      setCloudSyncing(false);
+    }
+  };
+
+  // Load boards from Supabase, falling back to localStorage
+  const loadCloudBoards = async (loadedBoards: SavedBoard[]) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return loadedBoards;
+
+      const { data: cloudBoards } = await supabase
+        .from("whiteboards")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false });
+
+      if (cloudBoards && cloudBoards.length > 0) {
+        const merged: SavedBoard[] = cloudBoards.map((cb: Record<string, unknown>) => ({
+          id: cb.id as string,
+          name: cb.name as string,
+          actions: (cb.actions as CanvasAction[]) || [],
+          bgMode: (cb.bg_mode as 'whiteboard' | 'blackboard') || 'blackboard',
+          showGrid: true,
+          createdAt: (cb.created_at as string) || new Date().toISOString(),
+        }));
+
+        // Merge: cloud wins, but keep any local boards not yet synced
+        const localMap = new Map(loadedBoards.map(b => [b.id, b]));
+        for (const cb of merged) {
+          localMap.set(cb.id, cb);
+        }
+        return Array.from(localMap.values()).sort((a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      }
+    } catch {
+      // Fall back to localStorage
+    }
+    return loadedBoards;
   };
 
   // Switch Active Boards
@@ -795,6 +1078,7 @@ export default function WhiteboardClient() {
       name,
       actions: [],
       bgMode: 'blackboard',
+      showGrid: true,
       createdAt: new Date().toISOString()
     };
     
@@ -865,14 +1149,7 @@ export default function WhiteboardClient() {
   const toggleBgMode = () => {
     const nextMode: 'whiteboard' | 'blackboard' = bgMode === 'whiteboard' ? 'blackboard' : 'whiteboard';
     setBgMode(nextMode);
-    
-    // Save background mode setting directly to board state
-    const list: SavedBoard[] = boards.map(b => {
-      if (b.id === currentBoardId) {
-        return { ...b, bgMode: nextMode };
-      }
-      return b;
-    });
+    const list: SavedBoard[] = boards.map(b => b.id === currentBoardId ? { ...b, bgMode: nextMode } : b);
     setBoards(list);
     localStorage.setItem("studyflow_boards", JSON.stringify(list));
     toast.success(`Switched to ${nextMode === 'whiteboard' ? 'Whiteboard' : 'Blackboard'}`);
@@ -972,8 +1249,16 @@ export default function WhiteboardClient() {
             title="Toggle Whiteboard / Blackboard Mode"
           >
             <Monitor className="h-4 w-4 text-indigo-500" />
-            <span>Style: {bgMode === 'whiteboard' ? 'Whiteboard' : 'Blackboard'}</span>
+            <span className="hidden sm:inline">Style: {bgMode === 'whiteboard' ? 'Whiteboard' : 'Blackboard'}</span>
           </button>
+
+          {/* Cloud Sync Indicator */}
+          {lastCloudSave && (
+            <span className="hidden md:flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground bg-muted/30 px-2.5 py-1.5 rounded-full">
+              <CloudUpload className={cn("h-3 w-3", cloudSyncing && "animate-pulse")} />
+              {cloudSyncing ? "Saving..." : `Saved ${lastCloudSave}`}
+            </span>
+          )}
 
           {/* New board button */}
           <button
@@ -1150,10 +1435,12 @@ export default function WhiteboardClient() {
                     style={{
                       width: `${boardSize}px`,
                       height: `${boardSize}px`,
-                      backgroundImage: bgMode === 'whiteboard'
-                        ? 'radial-gradient(rgba(15, 23, 42, 0.08) 1.5px, transparent 1.5px)'
-                        : 'radial-gradient(rgba(99, 102, 241, 0.15) 1.5px, transparent 1.5px)',
-                      backgroundSize: '24px 24px',
+                      backgroundImage: showGrid
+                        ? (bgMode === 'whiteboard'
+                          ? 'radial-gradient(rgba(15, 23, 42, 0.08) 1.5px, transparent 1.5px)'
+                          : 'radial-gradient(rgba(99, 102, 241, 0.15) 1.5px, transparent 1.5px)')
+                        : 'none',
+                      backgroundSize: showGrid ? '24px 24px' : undefined,
                       transform: `scale(${zoom})`,
                       transformOrigin: '0 0'
                     }}
@@ -1256,10 +1543,10 @@ export default function WhiteboardClient() {
               </div>
 
               {/* Floating control toolbar (collapsible & responsive) */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 w-[95%] max-w-[820px] flex items-center justify-center px-4">
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 w-[95%] max-w-[900px] flex items-center justify-center px-4">
                 {/* Desktop Toolbar (Hidden on Mobile) */}
                 <div className={cn(
-                  "hidden md:flex w-full glass rounded-3xl py-3 px-4 flex-col md:flex-row items-center justify-between gap-3 shadow-2xl backdrop-blur-2xl border",
+                  "hidden md:flex w-full glass rounded-3xl py-3 px-4 flex-row flex-wrap items-center justify-center lg:justify-between gap-x-2.5 gap-y-2 shadow-2xl backdrop-blur-2xl border",
                   bgMode === 'whiteboard'
                     ? "bg-white/90 border-slate-200/60 shadow-slate-900/10 text-slate-900"
                     : "bg-[#0b0f19]/90 border-neutral-800/80 shadow-black/88 text-white"
@@ -1316,15 +1603,85 @@ export default function WhiteboardClient() {
                       title="Text mode (click anywhere to type instantly)"
                     >
                       <Type className="h-4.5 w-4.5" />
-                      <span>Text Mode</span>
+                      <span>Text</span>
                     </button>
+
+                    {/* Shapes dropdown */}
+                    <div className="relative">
+                      <button
+                        onClick={() => {
+                          setTool('shape');
+                          setShapeMenuOpen((o) => !o);
+                        }}
+                        className={cn(
+                          "h-10 px-3 rounded-xl flex items-center gap-1.5 transition-all text-xs font-black uppercase tracking-wider cursor-pointer font-sans",
+                          tool === 'shape'
+                            ? "bg-emerald-500 text-white shadow-md scale-105"
+                            : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                        )}
+                        title="Shape tools (Rectangle / Circle / Line / Arrow)"
+                      >
+                        {(() => {
+                          const active = SHAPE_OPTIONS.find((s) => s.type === shapeType) ?? SHAPE_OPTIONS[0];
+                          const ActiveIcon = active.icon;
+                          return <ActiveIcon className="h-4 w-4" />;
+                        })()}
+                        <span>{SHAPE_OPTIONS.find((s) => s.type === shapeType)?.label ?? 'Shapes'}</span>
+                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", shapeMenuOpen && "rotate-180")} />
+                      </button>
+
+                      <AnimatePresence>
+                        {shapeMenuOpen && (
+                          <>
+                            {/* Click-away backdrop */}
+                            <div
+                              className="fixed inset-0 z-40"
+                              onClick={() => setShapeMenuOpen(false)}
+                            />
+                            <motion.div
+                              initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                              transition={{ duration: 0.15, ease: "easeOut" }}
+                              className={cn(
+                                "absolute bottom-full mb-2 left-0 z-50 min-w-[160px] rounded-2xl p-1.5 border shadow-2xl backdrop-blur-2xl",
+                                bgMode === 'whiteboard'
+                                  ? "bg-white/95 border-slate-200 text-slate-900"
+                                  : "bg-[#0b0f19]/95 border-neutral-800 text-white"
+                              )}
+                            >
+                              {SHAPE_OPTIONS.map((s) => (
+                                <button
+                                  key={s.type}
+                                  onClick={() => {
+                                    setShapeType(s.type);
+                                    setTool('shape');
+                                    setShapeMenuOpen(false);
+                                  }}
+                                  className={cn(
+                                    "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer font-sans",
+                                    shapeType === s.type
+                                      ? "bg-emerald-500/15 text-emerald-500"
+                                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  )}
+                                >
+                                  <s.icon className="h-4 w-4 shrink-0" />
+                                  <span>{s.label}</span>
+                                  {shapeType === s.type && <Check className="h-3.5 w-3.5 ml-auto" />}
+                                </button>
+                              ))}
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   </div>
 
                   {/* Divider */}
-                  <div className="hidden md:block w-px h-8 bg-border" />
+                  <div className="hidden lg:block w-px h-8 bg-border" />
 
                   {/* Stroke Color Palette (only show if not erase tool) */}
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center justify-center flex-wrap gap-1.5 max-w-[230px]">
                     {tool !== 'eraser' ? (
                       colors.map((color) => (
                         <button
@@ -1360,34 +1717,78 @@ export default function WhiteboardClient() {
                   </div>
 
                   {/* Divider */}
-                  <div className="hidden md:block w-px h-8 bg-border" />
+                  <div className="hidden lg:block w-px h-8 bg-border" />
 
-                  {/* Brush stroke sizes */}
-                  <div className="flex items-center gap-1 bg-muted/20 p-1 rounded-2xl shrink-0">
-                    {[
-                      { size: 2, label: 'Thin' },
-                      { size: 5, label: 'Medium' },
-                      { size: 10, label: 'Thick' },
-                      { size: 18, label: 'Huge' }
-                    ].map((s) => (
-                      <button
-                        key={s.size}
-                        onClick={() => setStrokeSize(s.size)}
-                        className={cn(
-                          "h-8 px-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer font-sans",
-                          strokeSize === s.size
-                            ? "bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                        title={`${s.label} Brush`}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
+                  {/* Brush stroke size dropdown */}
+                  <div className="relative shrink-0">
+                    <button
+                      onClick={() => setBrushMenuOpen((o) => !o)}
+                      className={cn(
+                        "h-9 px-3 rounded-xl flex items-center gap-1.5 transition-all text-[10px] font-black uppercase tracking-wider cursor-pointer font-sans border",
+                        brushMenuOpen
+                          ? "border-primary/30 bg-primary/10 text-primary"
+                          : "border-border/60 bg-muted/20 text-muted-foreground hover:text-foreground"
+                      )}
+                      title="Brush size"
+                    >
+                      <span
+                        className="rounded-full bg-current shrink-0"
+                        style={{
+                          width: `${Math.max(4, Math.min(strokeSize, 14))}px`,
+                          height: `${Math.max(4, Math.min(strokeSize, 14))}px`,
+                        }}
+                      />
+                      <span>{BRUSH_OPTIONS.find((s) => s.size === strokeSize)?.label ?? 'Size'}</span>
+                      <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", brushMenuOpen && "rotate-180")} />
+                    </button>
+
+                    <AnimatePresence>
+                      {brushMenuOpen && (
+                        <>
+                          {/* Click-away backdrop */}
+                          <div className="fixed inset-0 z-40" onClick={() => setBrushMenuOpen(false)} />
+                          <motion.div
+                            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                            transition={{ duration: 0.15, ease: "easeOut" }}
+                            className={cn(
+                              "absolute bottom-full mb-2 right-0 z-50 min-w-[150px] rounded-2xl p-1.5 border shadow-2xl backdrop-blur-2xl",
+                              bgMode === 'whiteboard'
+                                ? "bg-white/95 border-slate-200 text-slate-900"
+                                : "bg-[#0b0f19]/95 border-neutral-800 text-white"
+                            )}
+                          >
+                            {BRUSH_OPTIONS.map((s) => (
+                              <button
+                                key={s.size}
+                                onClick={() => {
+                                  setStrokeSize(s.size);
+                                  setBrushMenuOpen(false);
+                                }}
+                                className={cn(
+                                  "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer font-sans",
+                                  strokeSize === s.size
+                                    ? "bg-primary/10 text-primary"
+                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                )}
+                              >
+                                <span
+                                  className="rounded-full bg-current shrink-0"
+                                  style={{ width: `${Math.min(s.size, 16)}px`, height: `${Math.min(s.size, 16)}px` }}
+                                />
+                                <span>{s.label}</span>
+                                {strokeSize === s.size && <Check className="h-3.5 w-3.5 ml-auto" />}
+                              </button>
+                            ))}
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   {/* Divider */}
-                  <div className="hidden md:block w-px h-8 bg-border" />
+                  <div className="hidden lg:block w-px h-8 bg-border" />
 
                   {/* Undo, Redo, Clear */}
                   <div className="flex items-center gap-1 shrink-0">
@@ -1458,6 +1859,26 @@ export default function WhiteboardClient() {
                       title="Pan tool"
                     >
                       <Hand className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setTool('shape')}
+                      className={cn(
+                        "h-8.5 w-8.5 rounded-lg flex items-center justify-center transition-all cursor-pointer",
+                        tool === 'shape' ? "bg-emerald-500 text-white shadow-sm scale-105" : "text-muted-foreground hover:text-foreground"
+                      )}
+                      title="Shape tools"
+                    >
+                      <Square className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setTool('text')}
+                      className={cn(
+                        "h-8.5 w-8.5 rounded-lg flex items-center justify-center transition-all cursor-pointer",
+                        tool === 'text' ? "bg-indigo-500 text-white shadow-sm scale-105" : "text-muted-foreground hover:text-foreground"
+                      )}
+                      title="Text mode"
+                    >
+                      <Type className="h-4 w-4" />
                     </button>
                   </div>
 
@@ -1582,6 +2003,30 @@ export default function WhiteboardClient() {
                           ))}
                         </div>
                       </div>
+
+                      {/* Shape Picker Section (only when shape tool active) */}
+                      {tool === 'shape' && (
+                        <div className="flex flex-col gap-1.5">
+                          <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-black font-sans">Shape</span>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {SHAPE_OPTIONS.map((s) => (
+                              <button
+                                key={s.type}
+                                onClick={() => setShapeType(s.type)}
+                                className={cn(
+                                  "h-9 rounded-lg flex flex-col items-center justify-center gap-0.5 text-[8px] font-black uppercase tracking-wider transition-all cursor-pointer font-sans",
+                                  shapeType === s.type
+                                    ? "bg-emerald-500/15 text-emerald-500"
+                                    : "bg-muted/20 text-muted-foreground hover:text-foreground"
+                                )}
+                              >
+                                <s.icon className="h-3.5 w-3.5" />
+                                {s.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>

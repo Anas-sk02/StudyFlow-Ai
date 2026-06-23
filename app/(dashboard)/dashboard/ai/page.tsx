@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Calendar, BookOpen, BrainCircuit, Target, ListTodo, ChevronRight, Activity } from "lucide-react";
+import { toast } from "sonner";
+import { Sparkles, Calendar, BrainCircuit, Target, ListTodo, Activity } from "lucide-react";
 
 type Timetable = { day: string; slots: Array<{ subject: string; task: string; hours: number }> };
 
@@ -23,12 +24,17 @@ export default function AIPage() {
     try {
       const response = await fetch("/api/ai/timetable", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subjects, availableHours, examDates }),
       });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to generate timetable");
+      }
       const data = await response.json();
       setSchedule(data.schedule || []);
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : "Failed to generate timetable");
     }
     setIsGenerating(null);
   }
@@ -37,11 +43,19 @@ export default function AIPage() {
     setIsGenerating("breakdown");
     const goal = String(formData.get("goal") || "");
     try {
-      const response = await fetch("/api/ai/breakdown", { method: "POST", body: JSON.stringify({ goal }) });
+      const response = await fetch("/api/ai/breakdown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goal }),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to generate breakdown");
+      }
       const data = await response.json();
       setBreakdown(data.tasks || []);
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : "Failed to generate breakdown");
     }
     setIsGenerating(null);
   }
@@ -49,14 +63,32 @@ export default function AIPage() {
   async function generateSummary() {
     setIsGenerating("summary");
     try {
+      // Fetch real user analytics first
+      const analyticsRes = await fetch("/api/analytics");
+      let completedTasks = 0;
+      let focusedHours = 0;
+      let streak = 0;
+
+      if (analyticsRes.ok) {
+        const a = await analyticsRes.json();
+        completedTasks = a.summary?.completed || 0;
+        focusedHours = (a.summary?.focusMinutes || 0) / 60;
+        streak = a.summary?.streakDays || 0;
+      }
+
       const response = await fetch("/api/ai/summary", {
         method: "POST",
-        body: JSON.stringify({ completedTasks: 6, focusedHours: 4.2, streak: 9 }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completedTasks, focusedHours, streak }),
       });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to generate insights");
+      }
       const data = await response.json();
       setSummary(data);
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : "Failed to generate insights");
     }
     setIsGenerating(null);
   }

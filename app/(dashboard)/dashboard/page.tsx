@@ -1,6 +1,7 @@
 import { Activity, Flame, Target, TrendingUp, Calendar, CheckCircle2, Clock } from "lucide-react";
 import { createClient } from "@/supabase/server";
 import type { StudyTask } from "@/lib/types";
+import { AnalyticsWidget } from "@/components/analytics-widget";
 
 export default async function DashboardOverviewPage() {
   const supabase = await createClient();
@@ -61,7 +62,7 @@ export default async function DashboardOverviewPage() {
             <h2 className="text-lg font-semibold">Today's Focus & Recent Tasks</h2>
             <span className="text-xs font-medium px-2 py-1 bg-primary/10 text-primary rounded-full">Realtime</span>
           </div>
-          
+
           {recentTasks.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border border-dashed rounded-xl border-border">
               <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mb-4">
@@ -110,6 +111,15 @@ export default async function DashboardOverviewPage() {
           </div>
         </section>
       </div>
+
+      {/* Analytics Section */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Your Analytics</h2>
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Last 7 Days</span>
+        </div>
+        <AnalyticsWidget />
+      </section>
     </div>
   );
 }

@@ -4,13 +4,14 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/supabase/client";
+import { signupSchema, loginSchema } from "@/lib/validations";
 import { Brain, ArrowRight, Loader2, Mail, ShieldCheck, Timer, ChevronLeft, User, Lock } from "lucide-react";
 
-export default function AuthCard() {
+export default function AuthCard({ initialMode = "login" }: { initialMode?: "login" | "signup" }) {
   const router = useRouter();
   const supabase = createClient();
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup">(initialMode);
   const [step, setStep] = useState<"form" | "otp">("form");
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -33,10 +34,29 @@ export default function AuthCard() {
     const emailVal = String(formData.get("email") || "").trim().toLowerCase();
     const passwordVal = String(formData.get("password") || "").trim();
     const nameVal = String(formData.get("fullName") || "").trim();
-    
+
     setEmail(emailVal);
     setFullName(nameVal);
     setPassword(passwordVal);
+
+    // Validate with zod
+    if (mode === "signup") {
+      const result = signupSchema.safeParse({ email: emailVal, password: passwordVal, fullName: nameVal });
+      if (!result.success) {
+        const firstErr = Object.values(result.error.flatten().fieldErrors).flat()[0];
+        toast.error(firstErr || "Please check your input");
+        setLoading(false);
+        return;
+      }
+    } else {
+      const result = loginSchema.safeParse({ email: emailVal, password: passwordVal });
+      if (!result.success) {
+        const firstErr = Object.values(result.error.flatten().fieldErrors).flat()[0];
+        toast.error(firstErr || "Please check your input");
+        setLoading(false);
+        return;
+      }
+    }
 
     try {
       if (mode === "login") {
@@ -45,28 +65,21 @@ export default function AuthCard() {
           password: passwordVal,
         });
 
-        if (error) throw error;
+        if (error) {
+          // Map Supabase errors to user-friendly messages
+          const message = error.message?.toLowerCase().includes("invalid")
+            ? "Invalid email or password. Please try again."
+            : "Unable to sign in. Please try again.";
+          toast.error(message);
+          setLoading(false);
+          return;
+        }
 
         toast.success("Welcome back!");
         router.push("/dashboard");
         router.refresh();
       } else {
-        // Check if user already exists
-        const { data: existingProfile, error: profileError } = await supabase
-          .from("profiles")
-          .select("email")
-          .eq("email", emailVal)
-          .maybeSingle();
-
-        if (profileError) {
-          console.error("Error checking profile:", profileError);
-        }
-
-        if (existingProfile) {
-          throw new Error("An account with this email already exists. Please log in.");
-        }
-
-        // Hybrid Signup: Use OTP for verification, then set password
+        // Use Supabase's built-in duplicate detection instead of manual check
         const { error } = await supabase.auth.signInWithOtp({
           email: emailVal,
           options: {
@@ -75,16 +88,22 @@ export default function AuthCard() {
           },
         });
 
-        if (error) throw error;
+        if (error) {
+          const message = error.message?.toLowerCase().includes("already")
+            ? "An account with this email already exists. Please log in instead."
+            : "Unable to send verification code. Please try again.";
+          toast.error(message);
+          setLoading(false);
+          return;
+        }
 
-        setPassword(passwordVal); 
-        
         toast.success("Verification code sent to your email!");
         setStep("otp");
         setTimer(60);
       }
-    } catch (error: any) {
-      toast.error(error.message || "Authentication failed. Please check your credentials.");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Authentication failed.";
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -105,15 +124,18 @@ export default function AuthCard() {
       if (error) throw error;
 
       if (data.session && data.user) {
-        // Automatically set password for new accounts after OTP success
+        // Set password for new accounts after OTP success
         if (mode === "signup" && password) {
-          await supabase.auth.updateUser({
+          const { error: passwordError } = await supabase.auth.updateUser({
             password: password,
           });
+          if (passwordError) {
+            toast.error("Account created but failed to set password. You can reset it later.");
+          }
         }
 
         toast.success(mode === "signup" ? "Account created successfully!" : "Welcome back!");
-        
+
         setTimeout(() => {
           router.push("/dashboard");
           router.refresh();
@@ -121,8 +143,9 @@ export default function AuthCard() {
       } else {
         throw new Error("Verification successful but no session created.");
       }
-    } catch (error: any) {
-      toast.error(error.message || "Invalid or expired OTP.");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Invalid or expired OTP.";
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -145,8 +168,8 @@ export default function AuthCard() {
               {mode === "login" ? "Welcome Back" : "Create Account"}
             </h1>
             <p className="text-sm text-muted-foreground mt-2 font-medium">
-              {mode === "login" 
-                ? "Sign in securely with Email OTP." 
+              {mode === "login"
+                ? "Sign in with your email and password."
                 : "Enter your details to receive an OTP."}
             </p>
           </div>
@@ -175,8 +198,11 @@ export default function AuthCard() {
                 <div className="relative group">
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                   <input
-                    className="w-full rounded-2xl border border-border/60 bg-background/50 pl-11 pr-4 py-3.5 focus:bg-background focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all text-sm outline-none font-medium"
+                    className="w-full rounded-2xl border border-border/60 bg-background/50 pl-11 pr-4 py-3.5 focus:bg-background focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all text-base sm:text-sm outline-none font-medium"
                     name="fullName"
+                    type="text"
+                    autoComplete="name"
+                    autoCapitalize="words"
                     placeholder="e.g. John Doe"
                     required
                   />
@@ -191,9 +217,14 @@ export default function AuthCard() {
               <div className="relative group">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                 <input
-                  className="w-full rounded-2xl border border-border/60 bg-background/50 pl-11 pr-4 py-3.5 focus:bg-background focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all text-sm outline-none font-medium"
+                  className="w-full rounded-2xl border border-border/60 bg-background/50 pl-11 pr-4 py-3.5 focus:bg-background focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all text-base sm:text-sm outline-none font-medium"
                   name="email"
                   type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   placeholder="you@example.com"
                   required
                 />
@@ -207,9 +238,10 @@ export default function AuthCard() {
               <div className="relative group">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                 <input
-                  className="w-full rounded-2xl border border-border/60 bg-background/50 pl-11 pr-4 py-3.5 focus:bg-background focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all text-sm outline-none font-medium"
+                  className="w-full rounded-2xl border border-border/60 bg-background/50 pl-11 pr-4 py-3.5 focus:bg-background focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all text-base sm:text-sm outline-none font-medium"
                   name="password"
                   type="password"
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
                   placeholder="••••••••"
                   required
                 />
@@ -221,9 +253,9 @@ export default function AuthCard() {
               className="w-full mt-4 rounded-2xl bg-primary px-4 py-4 text-sm font-black text-primary-foreground shadow-xl shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-70 group"
             >
               {loading ? (
-                <><Loader2 className="h-5 w-5 animate-spin" /> Sending...</>
+                <><Loader2 className="h-5 w-5 animate-spin" /> {mode === "login" ? "Signing in..." : "Sending..."}</>
               ) : (
-                <>{mode === "login" ? "Get Login OTP" : "Get Signup OTP"} <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" /></>
+                <>{mode === "login" ? "Sign In" : "Get Signup OTP"} <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" /></>
               )}
             </button>
           </form>
@@ -235,7 +267,7 @@ export default function AuthCard() {
               <ShieldCheck className="h-8 w-8 text-primary" /> Verify OTP
             </h1>
             <p className="text-sm text-muted-foreground mt-2 font-medium">
-              We've sent a <span className="text-foreground font-bold">6-digit</span> code to <br />
+              We&apos;ve sent a <span className="text-foreground font-bold">6-digit</span> code to <br />
               <span className="text-foreground font-bold">{email}</span>
             </p>
           </div>
@@ -249,6 +281,10 @@ export default function AuthCard() {
                 className="w-full text-center text-3xl tracking-[0.3em] font-black rounded-2xl border border-border/60 bg-background/50 px-4 py-5 focus:bg-background focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all outline-none"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="one-time-code"
                 placeholder="000000"
                 maxLength={6}
                 required
@@ -276,8 +312,8 @@ export default function AuthCard() {
                     if (error) throw error;
                     toast.success("New 6-digit OTP sent!");
                     setTimer(60);
-                  } catch (e: any) {
-                    toast.error(e.message);
+                  } catch (e: unknown) {
+                    toast.error(e instanceof Error ? e.message : "Failed to resend code.");
                   } finally {
                     setLoading(false);
                   }

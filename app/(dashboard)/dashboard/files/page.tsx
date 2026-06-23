@@ -3,17 +3,16 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { createClient } from "@/supabase/client";
-import { 
-  UploadCloud, 
-  FileText, 
-  Trash2, 
-  Eye, 
-  Search, 
-  Plus, 
-  Loader2, 
-  Clock, 
+import {
+  UploadCloud,
+  FileText,
+  Trash2,
+  Eye,
+  Search,
+  Plus,
+  Loader2,
+  Clock,
   Download,
-  X,
   File as FileIcon
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";

@@ -3,7 +3,7 @@ import AuthCard from "@/components/auth-card";
 export default function LoginPage() {
   return (
     <div className="grid min-h-screen place-items-center p-4">
-      <AuthCard />
+      <AuthCard initialMode="login" />
     </div>
   );
 }
