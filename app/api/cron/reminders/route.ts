@@ -15,7 +15,8 @@ function getResend() {
 }
 
 let supabaseInstance: ReturnType<typeof createClient> | null = null;
-function getSupabase(): ReturnType<typeof createClient> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getSupabase(): any {
   if (!supabaseInstance) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
