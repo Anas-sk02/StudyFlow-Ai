@@ -10,6 +10,7 @@ import {
 import type {
   AppNotification, NotificationSettings, NotificationType, StudyTask,
 } from "@/lib/types";
+import { checkAndSendEmailRemindersAction } from "@/app/(dashboard)/dashboard/tasks/actions";
 
 function todayKey(): string {
   const d = new Date();
@@ -129,6 +130,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
       await runScanners(user.id, s);
       await fetchList(user.id);
+
+      if (s.daily_summary) {
+        void checkAndSendEmailRemindersAction();
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -219,6 +224,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!userId) return;
     setSettings((prev) => ({ ...prev, ...patch }));
     await supabase.from("notification_settings").upsert({ user_id: userId, ...patch, updated_at: new Date().toISOString() });
+    
+    if (patch.daily_summary === true) {
+      void checkAndSendEmailRemindersAction();
+    }
   }, [supabase, userId]);
 
   const value: NotificationContextValue = {

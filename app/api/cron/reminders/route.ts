@@ -15,7 +15,7 @@ function getResend() {
 }
 
 let supabaseInstance: ReturnType<typeof createClient> | null = null;
-function getSupabase(): any {
+function getSupabase(): ReturnType<typeof createClient> {
   if (!supabaseInstance) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -41,10 +41,13 @@ export async function GET(req: Request) {
 
   try {
     const now = new Date();
-    const targetTime = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours from now
-    
-    // Fetch incomplete tasks with deadlines near the target time
-    // We filter for tasks where reminder_sent is false
+    // Vercel Hobby allows only a once-per-day cron, so this runs as a daily
+    // digest: it reminds about anything due within the next 48h. The window is
+    // wider than the 24h gap between daily runs so deadlines never slip through,
+    // and `reminder_sent` ensures each task is only emailed once.
+    const WINDOW_HOURS = 48;
+
+    // Fetch incomplete, not-yet-reminded tasks that have a deadline
     const { data: tasks, error: tasksError } = await getSupabase()
       .from("study_tasks")
       .select("*, profiles(email, full_name)")
@@ -54,9 +57,28 @@ export async function GET(req: Request) {
 
     if (tasksError) throw tasksError;
 
+    // Fetch user settings to respect daily_summary preference
+    const { data: settingsList, error: settingsError } = await getSupabase()
+      .from("notification_settings")
+      .select("user_id, daily_summary");
+
+    if (settingsError) throw settingsError;
+
+    interface NotificationSettingRow {
+      user_id: string;
+      daily_summary: boolean;
+    }
+
+    const allowedUserIds = new Set(
+      ((settingsList ?? []) as unknown as NotificationSettingRow[])
+        .filter((s) => s.daily_summary)
+        .map((s) => s.user_id)
+    );
+
     const sentEmails = [];
 
     for (const task of tasks) {
+      if (!allowedUserIds.has(task.user_id)) continue;
       const deadline = new Date(task.deadline);
       if (task.due_time) {
         const [h, m] = task.due_time.split(":");
@@ -65,11 +87,11 @@ export async function GET(req: Request) {
         deadline.setHours(23, 59, 59);
       }
 
-      // If deadline is within the next 8-9 hours
+      // If the deadline falls within the reminder window
       const diffMs = deadline.getTime() - now.getTime();
       const diffHours = diffMs / (1000 * 60 * 60);
 
-      if (diffHours > 0 && diffHours <= 8) {
+      if (diffHours > 0 && diffHours <= WINDOW_HOURS) {
         const userEmail = task.profiles?.email;
         if (!userEmail) continue;
 
@@ -77,12 +99,12 @@ export async function GET(req: Request) {
           await getResend().emails.send({
             from: "StudyFlow AI <reminders@studyflow.ai>",
             to: userEmail,
-            subject: `Reminder: ${task.title} is due in 8 hours!`,
+            subject: `Reminder: ${task.title} is due soon`,
             html: `
               <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
                 <h2 style="color: #4f46e5;">Don't forget your task!</h2>
                 <p>Hi ${task.profiles.full_name || 'Student'},</p>
-                <p>This is a friendly reminder that your task <strong>"${task.title}"</strong> for <strong>${task.subject}</strong> is due in 8 hours.</p>
+                <p>This is a friendly reminder that your task <strong>"${task.title}"</strong> for <strong>${task.subject}</strong> is due soon.</p>
                 <div style="background: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0;">
                   <p style="margin: 0; font-size: 14px;"><strong>Deadline:</strong> ${new Date(task.deadline).toLocaleDateString()} ${task.due_time || ''}</p>
                 </div>

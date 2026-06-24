@@ -260,3 +260,116 @@ export async function rescheduleTaskAction(taskId: string, days: number): Promis
     return { error: "An unexpected error occurred." };
   }
 }
+
+export async function checkAndSendEmailRemindersAction(): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "You must be logged in." };
+
+    // 1. Check user notification settings first
+    const { data: settings, error: settingsError } = await supabase
+      .from("notification_settings")
+      .select("daily_summary")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (settingsError) {
+      console.error("Error fetching notification settings:", settingsError.message);
+      return { error: "Failed to load notification settings." };
+    }
+
+    // If daily summary (email reminders) is disabled, exit early
+    if (!settings || !settings.daily_summary) {
+      return { data: { sentCount: 0 } };
+    }
+
+    // 2. Fetch incomplete, not-yet-reminded tasks for this user
+    const { data: tasks, error: tasksError } = await supabase
+      .from("study_tasks")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("status", "todo")
+      .eq("reminder_sent", false)
+      .not("deadline", "is", null);
+
+    if (tasksError) {
+      console.error("Error fetching tasks for reminders:", tasksError.message);
+      return { error: "Failed to fetch tasks." };
+    }
+
+    if (!tasks || tasks.length === 0) {
+      return { data: { sentCount: 0 } };
+    }
+
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) {
+      console.warn("RESEND_API_KEY is not set. Email reminders skipped.");
+      return { data: { sentCount: 0 } };
+    }
+
+    const { Resend } = await import("resend");
+    const resend = new Resend(resendKey);
+
+    const userEmail = user.email;
+    if (!userEmail) {
+      return { error: "User email not found." };
+    }
+
+    const now = new Date();
+    const WINDOW_HOURS = 48;
+    const sentEmails: string[] = [];
+
+    for (const task of tasks) {
+      const deadline = new Date(task.deadline);
+      if (task.due_time) {
+        const [h, m] = task.due_time.split(":");
+        deadline.setHours(parseInt(h), parseInt(m), 0);
+      } else {
+        deadline.setHours(23, 59, 59);
+      }
+
+      const diffMs = deadline.getTime() - now.getTime();
+      const diffHours = diffMs / (1000 * 60 * 60);
+
+      // If due within next 48 hours and not in the past
+      if (diffHours > 0 && diffHours <= WINDOW_HOURS) {
+        try {
+          await resend.emails.send({
+            from: "StudyFlow AI <reminders@studyflow.ai>",
+            to: userEmail,
+            subject: `Reminder: ${task.title} is due soon`,
+            html: `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                <h2 style="color: #4f46e5;">Don't forget your task!</h2>
+                <p>Hi ${user.user_metadata?.full_name || 'Student'},</p>
+                <p>This is a friendly reminder that your task <strong>"${task.title}"</strong> for <strong>${task.subject}</strong> is due soon.</p>
+                <div style="background: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 0; font-size: 14px;"><strong>Deadline:</strong> ${new Date(task.deadline).toLocaleDateString()} ${task.due_time || ''}</p>
+                </div>
+                <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/dashboard/tasks" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 25px; border-radius: 8px; text-decoration: none; font-weight: bold;">Go to Planner</a>
+                <p style="font-size: 12px; color: #666; margin-top: 30px;">Keep up the great work! Consistency is key.</p>
+              </div>
+            `
+          });
+
+          // Mark as sent
+          await supabase
+            .from("study_tasks")
+            .update({ reminder_sent: true })
+            .eq("id", task.id);
+
+          sentEmails.push(task.id);
+        } catch (emailErr) {
+          console.error(`Failed to send email for task ${task.id}:`, emailErr);
+        }
+      }
+    }
+
+    return { data: { sentCount: sentEmails.length } };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+    console.error("checkAndSendEmailRemindersAction error:", message);
+    return { error: "An unexpected error occurred." };
+  }
+}
