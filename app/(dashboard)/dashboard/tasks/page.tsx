@@ -13,43 +13,59 @@ import {
   Filter, 
   AlertCircle, 
   CheckCircle2, 
-  ChevronRight, 
+  ChevronRight,
   CalendarClock,
   Trash2,
   Undo2,
-  CalendarDays
+  CalendarDays,
+  Repeat,
+  Edit3,
+  ChevronDown,
+  ListChecks,
+  Hourglass,
+  X,
+  Plus as PlusIcon
 } from "lucide-react";
 import { createClient } from "@/supabase/client";
-import type { StudyTask } from "@/lib/types";
-import { createTaskAction, toggleTaskAction, deleteTaskAction, rescheduleTaskAction } from "./actions";
+import type { StudyTask, Subtask } from "@/lib/types";
+import { createTaskAction, updateTaskAction, toggleTaskAction, deleteTaskAction, rescheduleTaskAction } from "./actions";
 import { cn } from "@/lib/utils";
 import { TaskCardSkeleton } from "@/components/ui/skeleton";
 
 export default function TasksPage() {
   const supabase = createClient();
   const [tasks, setTasks] = useState<StudyTask[]>([]);
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [isAdding, setIsAdding] = useState(false);
+  const [editingTask, setEditingTask] = useState<StudyTask | null>(null);
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("study_tasks")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) {
-        toast.error(error.message);
+      const { data: { user } } = await supabase.auth.getUser();
+      setUserId(user?.id ?? null);
+      const [tasksRes, subRes] = await Promise.all([
+        supabase.from("study_tasks").select("*").order("created_at", { ascending: false }),
+        supabase.from("subtasks").select("*").order("position", { ascending: true }),
+      ]);
+      if (tasksRes.error) {
+        toast.error(tasksRes.error.message);
+        setLoading(false);
         return;
       }
-      setTasks((data || []) as StudyTask[]);
+      setTasks((tasksRes.data || []) as StudyTask[]);
+      setSubtasks((subRes.data || []) as Subtask[]);
       setLoading(false);
     };
     void load();
   }, [supabase]);
+
+  const showForm = isAdding || !!editingTask;
 
   const now = new Date();
 
@@ -97,19 +113,31 @@ export default function TasksPage() {
 
   const subjects = useMemo(() => Array.from(new Set(tasks.map(t => t.subject))), [tasks]);
 
-  async function addTask(formData: FormData): Promise<void> {
-    const result = await createTaskAction(formData);
-    
-    if (result.error) {
-      toast.error(result.error);
+  async function submitTask(formData: FormData): Promise<void> {
+    if (editingTask) {
+      const result = await updateTaskAction(editingTask.id, formData);
+      if (result.error) { toast.error(result.error); return; }
+      if (result.data) {
+        const updated = result.data as StudyTask;
+        setTasks((old) => old.map((t) => (t.id === editingTask.id ? updated : t)));
+        toast.success("Task updated.");
+        setEditingTask(null);
+      }
       return;
     }
-
+    const result = await createTaskAction(formData);
+    if (result.error) { toast.error(result.error); return; }
     if (result.data) {
       setTasks((old) => [result.data as StudyTask, ...old]);
       toast.success("Task created.");
       setIsAdding(false);
     }
+  }
+
+  function startEdit(task: StudyTask): void {
+    setIsAdding(false);
+    setEditingTask(task);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function toggleDone(task: StudyTask): Promise<void> {
@@ -119,8 +147,37 @@ export default function TasksPage() {
       toast.error(result.error);
       return;
     }
-    setTasks((old) => old.map((t) => (t.id === task.id ? { ...t, status: next as typeof task.status, completed_at: (result.data as { completed_at: string | null })?.completed_at } : t)));
-    toast.success(next === "done" ? "Task completed!" : "Task restored.");
+    const payload = result.data as { completed_at: string | null; spawned?: StudyTask | null };
+    setTasks((old) => {
+      let updated = old.map((t) => (t.id === task.id ? { ...t, status: next as typeof task.status, completed_at: payload?.completed_at } : t));
+      if (payload?.spawned) updated = [payload.spawned, ...updated];
+      return updated;
+    });
+    toast.success(next === "done" ? (payload?.spawned ? "Completed! Next one scheduled 🔁" : "Task completed!") : "Task restored.");
+  }
+
+  // ----- subtasks (client-side, RLS-protected) -----
+  async function addSubtask(taskId: string, title: string): Promise<void> {
+    if (!userId || !title.trim()) return;
+    const position = subtasks.filter((s) => s.task_id === taskId).length;
+    const { data, error } = await supabase
+      .from("subtasks").insert({ user_id: userId, task_id: taskId, title: title.trim(), position }).select("*").single();
+    if (error) { toast.error("Couldn't add subtask."); return; }
+    setSubtasks((old) => [...old, data as Subtask]);
+  }
+
+  async function toggleSubtask(s: Subtask): Promise<void> {
+    setSubtasks((old) => old.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)));
+    const { error } = await supabase.from("subtasks").update({ done: !s.done }).eq("id", s.id);
+    if (error) {
+      toast.error("Couldn't update subtask.");
+      setSubtasks((old) => old.map((x) => (x.id === s.id ? { ...x, done: s.done } : x)));
+    }
+  }
+
+  async function deleteSubtask(id: string): Promise<void> {
+    setSubtasks((old) => old.filter((x) => x.id !== id));
+    await supabase.from("subtasks").delete().eq("id", id);
   }
 
   async function deleteTask(id: string): Promise<void> {
@@ -178,8 +235,8 @@ export default function TasksPage() {
               Done
             </button>
           </div>
-          <button 
-            onClick={() => setIsAdding(!isAdding)}
+          <button
+            onClick={() => { setEditingTask(null); setIsAdding((v) => !v); }}
             className="h-12 w-12 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 flex items-center justify-center hover:-translate-y-1 transition-all"
           >
             <Plus className="h-6 w-6" />
@@ -222,26 +279,31 @@ export default function TasksPage() {
       </div>
 
       <AnimatePresence>
-        {isAdding && (
+        {showForm && (
           <motion.div
+            key={editingTask?.id ?? "new"}
             initial={{ opacity: 0, scale: 0.95, y: -20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -20 }}
             className="glass rounded-3xl p-8 border-2 border-primary/20 shadow-2xl shadow-primary/5"
           >
-            <form action={addTask} className="space-y-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-black">{editingTask ? "Edit Task" : "New Task"}</h3>
+              <button type="button" onClick={() => { setIsAdding(false); setEditingTask(null); }} className="h-8 w-8 rounded-xl border border-border/60 flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"><X className="h-4 w-4" /></button>
+            </div>
+            <form action={submitTask} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <ListTodo className="h-4 w-4 text-primary" /> Task Name
                   </label>
-                  <input name="title" required placeholder="e.g. Finish Math Assignment" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
+                  <input name="title" required defaultValue={editingTask?.title ?? ""} placeholder="e.g. Finish Math Assignment" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <Tag className="h-4 w-4 text-primary" /> Subject
                   </label>
-                  <input name="subject" required placeholder="e.g. Calculus" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
+                  <input name="subject" required defaultValue={editingTask?.subject ?? ""} placeholder="e.g. Calculus" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
                 </div>
               </div>
 
@@ -250,19 +312,19 @@ export default function TasksPage() {
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <CalendarIcon className="h-4 w-4 text-primary" /> Due Date
                   </label>
-                  <input name="deadline" type="date" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
+                  <input name="deadline" type="date" defaultValue={editingTask?.deadline ?? ""} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <Clock className="h-4 w-4 text-primary" /> Time (Optional)
                   </label>
-                  <input name="due_time" type="time" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
+                  <input name="due_time" type="time" defaultValue={editingTask?.due_time?.slice(0, 5) ?? ""} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 text-primary" /> Priority
                   </label>
-                  <select name="priority" className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none appearance-none">
+                  <select name="priority" defaultValue={editingTask?.priority ?? "medium"} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none appearance-none">
                     <option value="low" className="dark:bg-neutral-900">Low Priority</option>
                     <option value="medium" className="dark:bg-neutral-900">Medium Priority</option>
                     <option value="high" className="dark:bg-neutral-900">High Priority</option>
@@ -270,10 +332,30 @@ export default function TasksPage() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
+                    <Hourglass className="h-4 w-4 text-primary" /> Estimated Hours
+                  </label>
+                  <input name="estimated_hours" type="number" min={0.5} max={24} step={0.5} defaultValue={editingTask?.estimated_hours ?? 1} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
+                    <Repeat className="h-4 w-4 text-primary" /> Repeat
+                  </label>
+                  <select name="recurrence" defaultValue={editingTask?.recurrence ?? "none"} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none appearance-none">
+                    <option value="none" className="dark:bg-neutral-900">Does not repeat</option>
+                    <option value="daily" className="dark:bg-neutral-900">Daily</option>
+                    <option value="weekly" className="dark:bg-neutral-900">Weekly</option>
+                    <option value="monthly" className="dark:bg-neutral-900">Monthly</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-border/40">
-                <button type="button" onClick={() => setIsAdding(false)} className="px-6 py-3 rounded-xl text-sm font-bold hover:bg-muted/50 transition-all">Cancel</button>
+                <button type="button" onClick={() => { setIsAdding(false); setEditingTask(null); }} className="px-6 py-3 rounded-xl text-sm font-bold hover:bg-muted/50 transition-all">Cancel</button>
                 <button type="submit" className="px-8 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all">
-                  Save Task
+                  {editingTask ? "Save Changes" : "Save Task"}
                 </button>
               </div>
             </form>
@@ -306,13 +388,18 @@ export default function TasksPage() {
                 const isOverdue = !task.status.includes("done") && task.deadline && new Date(task.deadline) < now;
                 
                 return (
-                  <TaskCard 
-                    key={task.id} 
-                    task={task} 
+                  <TaskCard
+                    key={task.id}
+                    task={task}
                     isOverdue={!!isOverdue}
+                    subtasks={subtasks.filter((s) => s.task_id === task.id)}
                     onToggle={() => toggleDone(task)}
                     onDelete={() => deleteTask(task.id)}
                     onReschedule={(days) => rescheduleTask(task.id, days)}
+                    onEdit={() => startEdit(task)}
+                    onAddSubtask={(title) => addSubtask(task.id, title)}
+                    onToggleSubtask={toggleSubtask}
+                    onDeleteSubtask={deleteSubtask}
                   />
                 );
               })}
@@ -324,22 +411,37 @@ export default function TasksPage() {
   );
 }
 
-function TaskCard({ 
-  task, 
-  isOverdue, 
-  onToggle, 
+function TaskCard({
+  task,
+  isOverdue,
+  subtasks,
+  onToggle,
   onDelete,
-  onReschedule
-}: { 
-  task: StudyTask, 
+  onReschedule,
+  onEdit,
+  onAddSubtask,
+  onToggleSubtask,
+  onDeleteSubtask,
+}: {
+  task: StudyTask,
   isOverdue: boolean,
+  subtasks: Subtask[],
   onToggle: () => void,
   onDelete: () => void,
-  onReschedule: (days: number) => void
+  onReschedule: (days: number) => void,
+  onEdit: () => void,
+  onAddSubtask: (title: string) => void,
+  onToggleSubtask: (s: Subtask) => void,
+  onDeleteSubtask: (id: string) => void,
 }) {
   const x = useMotionValue(0);
   const background = useTransform(x, [-100, 0, 100], ["#ef4444", "rgba(0,0,0,0)", "#10b981"]);
   const opacity = useTransform(x, [-100, -50, 0, 50, 100], [1, 0.5, 0, 0.5, 1]);
+
+  const [showSubs, setShowSubs] = useState(false);
+  const [newSub, setNewSub] = useState("");
+  const doneCount = subtasks.filter((s) => s.done).length;
+  const submitSub = () => { if (newSub.trim()) { onAddSubtask(newSub); setNewSub(""); } };
 
   return (
     <motion.div
@@ -373,11 +475,12 @@ function TaskCard({
         }}
         style={{ x }}
         className={cn(
-          "glass relative z-10 p-5 md:p-7 flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-8 cursor-grab active:cursor-grabbing transition-colors duration-500 dark:bg-zinc-900/90",
+          "glass relative z-10 p-5 md:p-7 flex flex-col gap-4 cursor-grab active:cursor-grabbing transition-colors duration-500 dark:bg-zinc-900/90",
           task.status === "done" && "bg-muted/30 opacity-70",
           isOverdue && "border-red-500/30 bg-red-500/[0.02] dark:bg-red-500/10"
         )}
       >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-8 w-full">
         <div className="flex items-start gap-5 flex-1 min-w-0">
           <button 
             onClick={onToggle}
@@ -423,7 +526,12 @@ function TaskCard({
                 )}>
                   <CalendarDays className="h-3.5 w-3.5" /> 
                   {new Date(task.deadline).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}
-                  {task.due_time && ` • ${task.due_time}`}
+                  {task.due_time && ` • ${task.due_time.slice(0, 5)}`}
+                </span>
+              )}
+              {task.recurrence && task.recurrence !== "none" && (
+                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border bg-violet-500/10 text-violet-600 border-violet-500/20 dark:bg-violet-500/30 dark:text-violet-300 dark:border-violet-500/40">
+                  <Repeat className="h-3 w-3" /> {task.recurrence}
                 </span>
               )}
               <span className={cn(
@@ -460,13 +568,71 @@ function TaskCard({
             </div>
           )}
           
-          <button 
+          <button
+            onClick={onEdit}
+            className="p-2.5 md:p-3 rounded-2xl border border-border/40 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all md:opacity-0 md:group-hover:opacity-100"
+            title="Edit task"
+          >
+            <Edit3 className="h-4 w-4 md:h-5 w-5" />
+          </button>
+          <button
             onClick={onDelete}
             className="p-2.5 md:p-3 rounded-2xl border border-border/40 text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-all md:opacity-0 md:group-hover:opacity-100"
             title="Delete task"
           >
             <Trash2 className="h-4 w-4 md:h-5 w-5" />
           </button>
+        </div>
+        </div>
+
+        {/* Subtasks */}
+        <div onPointerDownCapture={(e) => e.stopPropagation()} className="border-t border-border/40 pt-3">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={() => setShowSubs((v) => !v)}
+              className="flex items-center gap-2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ListChecks className="h-3.5 w-3.5" />
+              {subtasks.length > 0 ? `Subtasks ${doneCount}/${subtasks.length}` : "Add subtasks"}
+              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showSubs && "rotate-180")} />
+            </button>
+            {subtasks.length > 0 && (
+              <div className="h-1.5 w-24 rounded-full bg-muted overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${(doneCount / subtasks.length) * 100}%` }} />
+              </div>
+            )}
+          </div>
+
+          <AnimatePresence initial={false}>
+            {showSubs && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                <div className="mt-3 space-y-1.5">
+                  {subtasks.map((s) => (
+                    <div key={s.id} className="flex items-center gap-2 group/sub">
+                      <button
+                        onClick={() => onToggleSubtask(s)}
+                        className={cn("h-5 w-5 rounded-md border flex items-center justify-center shrink-0 transition-colors", s.done ? "bg-emerald-500 border-emerald-500 text-white" : "border-border/60 hover:border-primary")}
+                      >
+                        {s.done && <CheckCircle2 className="h-3.5 w-3.5" />}
+                      </button>
+                      <span className={cn("text-sm flex-1 min-w-0 truncate", s.done && "line-through text-muted-foreground")}>{s.title}</span>
+                      <button onClick={() => onDeleteSubtask(s.id)} className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground opacity-0 group-hover/sub:opacity-100 hover:text-red-500 transition-all"><X className="h-3.5 w-3.5" /></button>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      value={newSub}
+                      onChange={(e) => setNewSub(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submitSub(); } }}
+                      placeholder="Add a subtask…"
+                      className="flex-1 h-9 rounded-lg border border-border/60 bg-background/50 px-3 text-sm outline-none focus:border-primary dark:bg-muted/20"
+                    />
+                    <button onClick={submitSub} className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center hover:bg-primary/20 transition-colors"><PlusIcon className="h-4 w-4" /></button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </motion.div>
     </motion.div>

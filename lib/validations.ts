@@ -21,6 +21,7 @@ export const taskSchema = z.object({
   due_time: z.string().optional(),
   priority: z.enum(["low", "medium", "high"]),
   estimated_hours: z.coerce.number().min(0.5).max(24),
+  recurrence: z.enum(["none", "daily", "weekly", "monthly"]).optional(),
   status: z.enum(["todo", "in_progress", "done"]).optional(),
 });
 

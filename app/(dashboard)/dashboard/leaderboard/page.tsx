@@ -18,6 +18,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { LeaderboardEntrySkeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/states";
 import Image from "next/image";
 
 type LeaderboardEntry = {
@@ -484,9 +485,11 @@ export default function LeaderboardPage() {
                 <LeaderboardEntrySkeleton key={i} />
               ))
             ) : leaderboard.length === 0 ? (
-              <div className="text-center py-12 text-sm text-muted-foreground">
-                No leaderboard entries found. Start studying to rank up!
-              </div>
+              <EmptyState
+                icon={Trophy}
+                title="No rankings yet"
+                description="Complete focus sessions and tasks to earn XP and climb the leaderboard."
+              />
             ) : (
               leaderboard.map((user, index) => {
                 const isCurrentUser = user.fullName.toLowerCase().includes(currentUserEmail.split('@')[0].toLowerCase());

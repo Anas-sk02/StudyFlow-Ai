@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/states";
 
 type Document = {
   id: string;
@@ -250,9 +251,12 @@ export default function FilesPage() {
                   <div key={i} className="h-24 rounded-2xl bg-muted animate-pulse" />
                 ))
               ) : filteredDocs.length === 0 ? (
-                <div className="col-span-full py-12 sm:py-16 text-center glass rounded-2xl sm:rounded-3xl border-dashed border-border/50">
-                  <FileText className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="text-sm sm:text-base text-muted-foreground font-medium">Your library is empty.</p>
+                <div className="col-span-full">
+                  <EmptyState
+                    icon={FileText}
+                    title={search ? "No matching files" : "Your library is empty"}
+                    description={search ? "Try a different search term." : "Upload a PDF to start building your study library."}
+                  />
                 </div>
               ) : (
                 filteredDocs.map((doc) => (
