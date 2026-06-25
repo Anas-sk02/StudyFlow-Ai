@@ -189,3 +189,24 @@ input:focus, textarea:focus, select:focus {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
+/* Anchor the panel to the viewport on mobile to prevent overflow, 
+   and to the right edge of the bell on desktop. */
+.notification-dropdown {
+  position: fixed !important;
+  top: 64px !important;
+  left: 16px !important;
+  right: 16px !important;
+  width: auto !important;
+  max-width: none !important;
+}
+@media (min-width: 640px) {
+  .notification-dropdown {
+    position: absolute !important;
+    top: auto !important;
+    left: auto !important;
+    right: 0 !important;
+    width: 340px !important;
+    max-width: calc(100vw - 2rem) !important;
+  }
+}
+

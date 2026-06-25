@@ -1,5 +1,5 @@
 /* StudyFlow AI service worker — app-shell cache + offline fallback */
-const CACHE = "studyflow-v1";
+const CACHE = "studyflow-v2";
 const PRECACHE = ["/dashboard", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {

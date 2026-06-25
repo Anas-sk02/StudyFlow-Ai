@@ -33,6 +33,15 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [snoozingId, setSnoozingId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 639px)");
+    setIsMobile(media.matches);
+    const listener = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
+  }, []);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -63,7 +72,17 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-[340px] max-w-[calc(100vw-2rem)] rounded-2xl border border-border bg-background shadow-[0_20px_50px_rgba(0,0,0,0.18)] overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-200">
+        <div
+          className="absolute notification-dropdown mt-2 w-[340px] max-w-[calc(100vw-2rem)] rounded-2xl border border-border bg-background shadow-[0_20px_50px_rgba(0,0,0,0.18)] overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-200"
+          style={isMobile ? {
+            position: "fixed",
+            top: "64px",
+            left: "16px",
+            right: "16px",
+            width: "auto",
+            maxWidth: "none",
+          } : undefined}
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
             <p className="text-sm font-bold">Notifications</p>
             <div className="flex items-center gap-1">

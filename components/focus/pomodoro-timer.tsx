@@ -54,8 +54,10 @@ export function PomodoroTimer() {
   const cycleDot = cycleCount % dotsCount;
 
   return (
-    <div className={cn("glass rounded-3xl p-6 sm:p-8 relative overflow-hidden border border-border/60")}>
-      <div className="absolute top-0 right-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+    <div className={cn("glass rounded-3xl p-6 sm:p-8 relative border border-border/60", (showTasks || showSettings) && "z-20")}>
+      <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16" />
+      </div>
 
       {/* Mode tabs */}
       <div className="relative flex items-center justify-center">
@@ -102,9 +104,15 @@ export function PomodoroTimer() {
                 <span className="text-sm text-muted-foreground">Auto-switch sessions</span>
                 <button
                   onClick={() => updatePrefs({ auto_switch: !prefs.auto_switch })}
-                  className={cn("relative h-6 w-11 rounded-full transition-colors", prefs.auto_switch ? "bg-primary" : "bg-muted-foreground/30")}
+                  className={cn("relative rounded-full transition-colors shrink-0", prefs.auto_switch ? "bg-primary" : "bg-muted-foreground/30")}
+                  style={{ width: "44px", height: "24px" }}
+                  role="switch"
+                  aria-checked={prefs.auto_switch}
                 >
-                  <span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform", prefs.auto_switch ? "translate-x-5" : "translate-x-0.5")} />
+                  <span
+                    className="absolute rounded-full bg-white shadow transition-all duration-200"
+                    style={{ width: "20px", height: "20px", top: "2px", left: prefs.auto_switch ? "22px" : "2px" }}
+                  />
                 </button>
               </div>
             </div>
@@ -113,7 +121,7 @@ export function PomodoroTimer() {
       </AnimatePresence>
 
       {/* Ring */}
-      <div className="mt-7 flex flex-col items-center">
+      <div className="mt-7 flex flex-col items-center overflow-visible w-full">
         <div className="relative w-[280px] h-[280px] max-w-full flex items-center justify-center">
           <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 300 300">
             <circle cx="150" cy="150" r={R} fill="none" stroke="currentColor" strokeWidth="8" className="text-muted/30" />
@@ -167,8 +175,8 @@ export function PomodoroTimer() {
         </div>
 
         {/* Current task + fullscreen */}
-        <div className="mt-6 w-full max-w-sm space-y-2">
-          <div className="relative">
+        <div className="mt-6 w-full max-w-sm space-y-2 overflow-visible">
+          <div className="relative overflow-visible">
             <button
               onClick={() => setShowTasks((s) => !s)}
               className="w-full flex items-center gap-2.5 rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-sm hover:bg-muted/40 transition-colors"

@@ -14,11 +14,15 @@ function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className={cn("relative h-6 w-11 rounded-full transition-colors shrink-0", on ? "bg-primary" : "bg-muted-foreground/30")}
+      className={cn("relative rounded-full transition-colors shrink-0", on ? "bg-primary" : "bg-muted-foreground/30")}
+      style={{ width: "44px", height: "24px" }}
       role="switch"
       aria-checked={on}
     >
-      <span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform", on ? "translate-x-5" : "translate-x-0.5")} />
+      <span
+        className="absolute rounded-full bg-white shadow transition-all duration-200"
+        style={{ width: "20px", height: "20px", top: "2px", left: on ? "22px" : "2px" }}
+      />
     </button>
   );
 }
