@@ -235,7 +235,33 @@ export default function AIPage() {
           </section>
         </div>
       </div>
+
+      <QuizCallout />
     </div>
+  );
+}
+
+function QuizCallout() {
+  return (
+    <a
+      href="/dashboard/tutor"
+      className="glass rounded-3xl p-6 md:p-8 flex items-center justify-between gap-4 group hover:shadow-md transition-all"
+    >
+      <div className="flex items-center gap-3">
+        <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-500">
+          <Sparkles className="h-6 w-6" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold">Ask AI &amp; Quiz Me</h2>
+          <p className="text-sm text-muted-foreground">
+            Chat with your AI tutor, solve doubts from a photo, or quiz yourself from notes.
+          </p>
+        </div>
+      </div>
+      <span className="text-sm font-medium text-primary group-hover:translate-x-1 transition-transform">
+        Open →
+      </span>
+    </a>
   );
 }
 

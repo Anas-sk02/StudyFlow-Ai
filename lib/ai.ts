@@ -1,52 +1,144 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 
-export async function generateJSON<T>(prompt: string, fallback?: T): Promise<T> {
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    console.warn("GEMINI_API_KEY is missing. Using smart fallback.");
-    return getSmartFallback<T>(prompt, fallback);
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const formattedPrompt = `
+const JSON_INSTRUCTION = `
 Return ONLY valid JSON.
 Do not add markdown.
 Do not add explanation.
-
-${prompt}
 `;
 
-  // 1. Try gemini-2.0-flash first
-  try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    const result = await model.generateContent(formattedPrompt);
-    const text = result.response
-      .text()
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
+function cleanJSON(text: string): string {
+  return text
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+}
 
-    return JSON.parse(text) as T;
-  } catch (error: any) {
-    console.warn("gemini-2.0-flash failed or hit quota limits. Attempting gemini-1.5-flash fallback...", error?.message || error);
+/**
+ * Collect every configured Gemini key. Supports GEMINI_API_KEY plus
+ * GEMINI_API_KEY_2, GEMINI_API_KEY_3 ... so multiple free accounts can
+ * be rotated to multiply the free daily quota.
+ */
+function geminiKeys(): string[] {
+  const keys = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY_4,
+  ];
+  return keys.filter((k): k is string => Boolean(k && k.trim()));
+}
 
-    // 2. Try gemini-1.5-flash as active fallback to bypass specific model quotas
-    try {
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-      const result = await model.generateContent(formattedPrompt);
-      const text = result.response
-        .text()
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
+type Provider = {
+  name: string;
+  run: (prompt: string) => Promise<string>;
+};
 
-      return JSON.parse(text) as T;
-    } catch (fallbackError) {
-      console.error("All Gemini API models failed. Triggering structure-aware smart topic fallback.", fallbackError);
-      return getSmartFallback<T>(prompt, fallback);
+/**
+ * Build the ordered list of providers to try. Each provider is free-tier
+ * friendly. Order: every Gemini key (best quality) -> Groq (fast) ->
+ * OpenRouter (variety). The first one that returns valid JSON wins.
+ */
+function buildProviders(): Provider[] {
+  const providers: Provider[] = [];
+
+  // 1. Gemini keys, each across two model versions.
+  for (const [i, key] of geminiKeys().entries()) {
+    const genAI = new GoogleGenerativeAI(key);
+    for (const modelName of ["gemini-2.0-flash", "gemini-2.5-flash"]) {
+      providers.push({
+        name: `gemini:${modelName}#${i + 1}`,
+        run: async (prompt) => {
+          const model = genAI.getGenerativeModel({ model: modelName });
+          const result = await model.generateContent(JSON_INSTRUCTION + "\n" + prompt);
+          return result.response.text();
+        },
+      });
     }
   }
+
+  // 2. Groq — OpenAI-compatible, very fast free tier.
+  if (process.env.GROQ_API_KEY?.trim()) {
+    const groq = new OpenAI({
+      apiKey: process.env.GROQ_API_KEY,
+      baseURL: "https://api.groq.com/openai/v1",
+    });
+    for (const modelName of ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]) {
+      providers.push({
+        name: `groq:${modelName}`,
+        run: async (prompt) => {
+          const res = await groq.chat.completions.create({
+            model: modelName,
+            messages: [
+              { role: "system", content: JSON_INSTRUCTION },
+              { role: "user", content: prompt },
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.7,
+          });
+          return res.choices[0]?.message?.content ?? "";
+        },
+      });
+    }
+  }
+
+  // 3. OpenRouter — free models as a final live attempt.
+  if (process.env.OPENROUTER_API_KEY?.trim()) {
+    const openrouter = new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: "https://openrouter.ai/api/v1",
+    });
+    for (const modelName of [
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "google/gemini-2.0-flash-exp:free",
+    ]) {
+      providers.push({
+        name: `openrouter:${modelName}`,
+        run: async (prompt) => {
+          const res = await openrouter.chat.completions.create({
+            model: modelName,
+            messages: [
+              { role: "system", content: JSON_INSTRUCTION },
+              { role: "user", content: prompt },
+            ],
+            temperature: 0.7,
+          });
+          return res.choices[0]?.message?.content ?? "";
+        },
+      });
+    }
+  }
+
+  return providers;
+}
+
+/**
+ * Tries every configured free provider in order. Returns the first valid
+ * JSON response. If everything fails (no keys, all quotas exhausted, network
+ * down), falls back to the structure-aware offline generator so the UI never
+ * breaks.
+ */
+export async function generateJSON<T>(prompt: string, fallback?: T): Promise<T> {
+  const providers = buildProviders();
+
+  if (providers.length === 0) {
+    console.warn("No AI provider keys configured. Using smart fallback.");
+    return getSmartFallback<T>(prompt, fallback);
+  }
+
+  for (const provider of providers) {
+    try {
+      const raw = await provider.run(prompt);
+      const parsed = JSON.parse(cleanJSON(raw)) as T;
+      return parsed;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`AI provider "${provider.name}" failed, trying next. Reason: ${message}`);
+    }
+  }
+
+  console.error("All AI providers failed. Using structure-aware smart fallback.");
+  return getSmartFallback<T>(prompt, fallback);
 }
 
 function getSmartFallback<T>(prompt: string, fallback?: T): T {
@@ -492,4 +584,170 @@ function getSmartFallback<T>(prompt: string, fallback?: T): T {
     insights: "AI response temporarily unavailable due to API rate limits. Focus on breaking your goals into tiny, achievable steps today.",
     motivation: "Keep going! Consistency beats intensity, and every small effort counts towards your long-term success.",
   } as unknown as T;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Conversational chat + image (vision) — used by the Ask AI / Doubt Solver  */
+/* -------------------------------------------------------------------------- */
+
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+const TUTOR_SYSTEM = `You are StudyFlow AI, a warm, encouraging expert tutor for students.
+Help the student understand concepts and solve their doubts.
+- Solve maths/science problems step by step, showing the working.
+- Explain clearly and concisely, like a friendly teacher.
+- Use simple Markdown: **bold** for key terms, "- " bullet lists, and \`code\` where useful.
+- If an image is provided, read the question/diagram in it and answer that.
+- End with a one-line takeaway or tip when it helps.`;
+
+/** Split a data URL ("data:image/png;base64,AAA") into mime + raw base64. */
+function parseDataUrl(dataUrl: string): { mimeType: string; data: string } | null {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) return null;
+  return { mimeType: match[1], data: match[2] };
+}
+
+type ChatProvider = {
+  name: string;
+  run: (messages: ChatMessage[], imageDataUrl?: string) => Promise<string>;
+};
+
+/**
+ * Provider chain for free-text chat. When an image is supplied, only
+ * vision-capable models are used so the picture is actually read.
+ */
+function buildChatProviders(hasImage: boolean): ChatProvider[] {
+  const providers: ChatProvider[] = [];
+
+  // --- Gemini (vision-capable on flash models) ---
+  const geminiModels = ["gemini-2.0-flash", "gemini-2.5-flash"];
+  for (const [i, key] of geminiKeys().entries()) {
+    const genAI = new GoogleGenerativeAI(key);
+    for (const modelName of geminiModels) {
+      providers.push({
+        name: `gemini:${modelName}#${i + 1}`,
+        run: async (messages, imageDataUrl) => {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: TUTOR_SYSTEM,
+          });
+          const contents = messages.map((m) => ({
+            role: m.role === "assistant" ? "model" : "user",
+            parts: [{ text: m.content }] as Array<
+              { text: string } | { inlineData: { mimeType: string; data: string } }
+            >,
+          }));
+          if (imageDataUrl && contents.length > 0) {
+            const img = parseDataUrl(imageDataUrl);
+            if (img) {
+              contents[contents.length - 1].parts.push({
+                inlineData: { mimeType: img.mimeType, data: img.data },
+              });
+            }
+          }
+          const result = await model.generateContent({ contents });
+          return result.response.text();
+        },
+      });
+    }
+  }
+
+  // --- Groq (Llama 4 Scout reads images; text models otherwise) ---
+  if (process.env.GROQ_API_KEY?.trim()) {
+    const groq = new OpenAI({
+      apiKey: process.env.GROQ_API_KEY,
+      baseURL: "https://api.groq.com/openai/v1",
+    });
+    const models = hasImage
+      ? ["meta-llama/llama-4-scout-17b-16e-instruct"]
+      : ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+    for (const modelName of models) {
+      providers.push({
+        name: `groq:${modelName}`,
+        run: (messages, imageDataUrl) =>
+          openAICompatChat(groq, modelName, messages, imageDataUrl),
+      });
+    }
+  }
+
+  // --- OpenRouter (free vision + text models) ---
+  if (process.env.OPENROUTER_API_KEY?.trim()) {
+    const openrouter = new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: "https://openrouter.ai/api/v1",
+    });
+    const models = hasImage
+      ? ["meta-llama/llama-3.2-11b-vision-instruct:free", "google/gemini-2.0-flash-exp:free"]
+      : ["meta-llama/llama-3.3-70b-instruct:free", "google/gemini-2.0-flash-exp:free"];
+    for (const modelName of models) {
+      providers.push({
+        name: `openrouter:${modelName}`,
+        run: (messages, imageDataUrl) =>
+          openAICompatChat(openrouter, modelName, messages, imageDataUrl),
+      });
+    }
+  }
+
+  return providers;
+}
+
+/** Shared OpenAI-compatible chat call (Groq + OpenRouter). */
+async function openAICompatChat(
+  client: OpenAI,
+  model: string,
+  messages: ChatMessage[],
+  imageDataUrl?: string
+): Promise<string> {
+  const history = messages.map((m) => ({ role: m.role, content: m.content }));
+
+  // Attach the image to the final user turn as multimodal content.
+  if (imageDataUrl && history.length > 0) {
+    const last = history[history.length - 1];
+    if (last.role === "user") {
+      (last as { role: "user"; content: unknown }).content = [
+        { type: "text", text: last.content || "Please look at this image and help me." },
+        { type: "image_url", image_url: { url: imageDataUrl } },
+      ];
+    }
+  }
+
+  const res = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: TUTOR_SYSTEM },
+      ...history,
+    ] as never,
+    temperature: 0.7,
+  });
+  return res.choices[0]?.message?.content ?? "";
+}
+
+/**
+ * Conversational reply across the free provider chain. Returns the first
+ * non-empty response. Throws only if every provider fails (the route turns
+ * that into a friendly error message).
+ */
+export async function generateText(
+  messages: ChatMessage[],
+  imageDataUrl?: string
+): Promise<string> {
+  const providers = buildChatProviders(Boolean(imageDataUrl));
+
+  if (providers.length === 0) {
+    throw new Error("No AI provider is configured. Add a GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY.");
+  }
+
+  let lastError = "";
+  for (const provider of providers) {
+    try {
+      const text = (await provider.run(messages, imageDataUrl))?.trim();
+      if (text) return text;
+      lastError = `${provider.name} returned an empty response`;
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error.message : String(error);
+      console.warn(`Chat provider "${provider.name}" failed, trying next. Reason: ${lastError}`);
+    }
+  }
+
+  throw new Error(lastError || "All AI providers are unavailable right now.");
 }

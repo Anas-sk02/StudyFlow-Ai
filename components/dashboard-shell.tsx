@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Bell, Calendar, CalendarDays, ListTodo, Moon, Sparkles, Sun, Search, Command as CmdIcon, ChevronLeft, ChevronRight, Menu, LogOut, User as UserIcon, BookOpen, Palette, Timer, Settings as SettingsIcon } from "lucide-react";
+import { Bell, Calendar, CalendarDays, ListTodo, Moon, Sparkles, Sun, Search, Command as CmdIcon, ChevronLeft, ChevronRight, Menu, LogOut, User as UserIcon, BookOpen, Palette, Timer, Settings as SettingsIcon, MessageSquare } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/supabase/client";
@@ -21,6 +21,7 @@ const links = [
   { href: "/dashboard/files", label: "Notes & Files", icon: CmdIcon },
   { href: "/dashboard/whiteboard", label: "Whiteboard", icon: Palette },
   { href: "/dashboard/focus", label: "Focus Hub", icon: Timer },
+  { href: "/dashboard/tutor", label: "Ask AI", icon: MessageSquare },
   { href: "/dashboard/ai", label: "AI Studio", icon: Sparkles },
 ];
 
