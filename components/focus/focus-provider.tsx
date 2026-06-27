@@ -404,6 +404,9 @@ export function FocusProvider({ children }: { children: React.ReactNode }) {
     completingRef.current = true;
     setIsRunning(false);
 
+    // alert chime the moment the timer hits zero (focus or break)
+    void engineRef.current?.playChime();
+
     (async () => {
       if (mode === "focus") {
         await persistFocusComplete();

@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/supabase/client";
 import { signupSchema, loginSchema } from "@/lib/validations";
-import { Brain, ArrowRight, Loader2, Mail, ShieldCheck, Timer, ChevronLeft, User, Lock } from "lucide-react";
+import { ArrowRight, Loader2, Mail, ShieldCheck, ChevronLeft, User, Lock } from "lucide-react";
+import { BrandMark } from "@/components/brand-logo";
 
 export default function AuthCard({ initialMode = "login" }: { initialMode?: "login" | "signup" }) {
   const router = useRouter();
@@ -156,9 +157,7 @@ export default function AuthCard({ initialMode = "login" }: { initialMode?: "log
       <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -z-10"></div>
       
       <div className="flex justify-center mb-8">
-        <div className="h-16 w-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center text-primary shadow-inner">
-          <Brain className="h-8 w-8" />
-        </div>
+        <BrandMark size={64} className="drop-shadow-xl drop-shadow-primary/20" />
       </div>
       
       {step === "form" ? (

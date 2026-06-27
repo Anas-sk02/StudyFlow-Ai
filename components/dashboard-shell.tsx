@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/supabase/client";
 import { NotificationProvider } from "@/components/notifications/notification-provider";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { BrandLogo, BrandMark } from "@/components/brand-logo";
 import Image from "next/image";
 
 const links = [
@@ -42,9 +43,9 @@ function SidebarContent({
     <>
       <div className={cn("flex h-16 items-center border-b border-border/50", isDesktop && isSidebarOpen ? "px-6" : "justify-center")}>
         {(!isDesktop || isSidebarOpen) ? (
-          <p className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-primary to-indigo-500">StudyFlow</p>
+          <BrandLogo size={30} textClassName="text-lg" />
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold">S</div>
+          <BrandMark size={34} />
         )}
       </div>
 

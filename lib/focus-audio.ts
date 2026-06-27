@@ -235,6 +235,52 @@ export class AmbientEngine {
     }, 700, 2200);
   }
 
+  /**
+   * Short, pleasant completion chime (rising major triad with a bell-like
+   * timbre). Plays on its own gain node straight to the speakers, so it's
+   * always audible regardless of the ambient master volume — and it does NOT
+   * stop any ambient sound that may be playing.
+   */
+  async playChime() {
+    const ctx = this.ensure();
+    if (ctx.state === "suspended") {
+      try { await ctx.resume(); } catch { /* ignore — needs a prior user gesture */ }
+    }
+    const now = ctx.currentTime;
+    const out = ctx.createGain();
+    out.gain.value = 0.55;
+    out.connect(ctx.destination);
+
+    // A5 · C#6 · E6 — bright and positive
+    const notes = [880, 1108.73, 1318.51];
+    notes.forEach((freq, i) => {
+      const t = now + i * 0.16;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.6, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+      osc.connect(g); g.connect(out);
+      osc.start(t); osc.stop(t + 1.2);
+
+      // octave shimmer for a glassy bell tone
+      const osc2 = ctx.createOscillator();
+      const g2 = ctx.createGain();
+      osc2.type = "sine";
+      osc2.frequency.setValueAtTime(freq * 2, t);
+      g2.gain.setValueAtTime(0.0001, t);
+      g2.gain.exponentialRampToValueAtTime(0.16, t + 0.012);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+      osc2.connect(g2); g2.connect(out);
+      osc2.start(t); osc2.stop(t + 0.8);
+    });
+
+    // release the dedicated output once the chime has fully decayed
+    setTimeout(() => { try { out.disconnect(); } catch { /* noop */ } }, 1800);
+  }
+
   async play(id: AmbientSoundId) {
     this.stop();
     const ctx = this.ensure();
