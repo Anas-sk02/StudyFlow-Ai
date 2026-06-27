@@ -54,20 +54,21 @@ export function PomodoroTimer() {
   const cycleDot = cycleCount % dotsCount;
 
   return (
-    <div className={cn("glass rounded-3xl p-6 sm:p-8 relative border border-border/60", (showTasks || showSettings) && "z-20")}>
+    <div className={cn("glass rounded-3xl p-5 sm:p-8 relative border border-border/60", (showTasks || showSettings) && "z-20")}>
       <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
         <div className="absolute top-0 right-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16" />
       </div>
 
-      {/* Mode tabs */}
-      <div className="relative flex items-center justify-center">
-        <div className="inline-flex rounded-2xl bg-muted/40 p-1 border border-border/50">
+      {/* Mode tabs — centered group + settings gear sit inline on mobile (so they
+          never overlap) and the gear pins to the right edge from sm upward. */}
+      <div className="relative flex items-center justify-center gap-2">
+        <div className="inline-flex max-w-full overflow-x-auto rounded-2xl bg-muted/40 p-1 border border-border/50 no-scrollbar">
           {(Object.keys(MODE_META) as FocusMode[]).map((m) => (
             <button
               key={m}
               onClick={() => switchMode(m)}
               className={cn(
-                "relative px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold rounded-xl transition-colors",
+                "relative shrink-0 px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold rounded-xl transition-colors whitespace-nowrap",
                 mode === m ? "text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -81,7 +82,7 @@ export function PomodoroTimer() {
         <button
           onClick={() => setShowSettings((s) => !s)}
           className={cn(
-            "absolute right-0 h-9 w-9 rounded-xl border border-border/60 flex items-center justify-center transition-colors",
+            "shrink-0 static sm:absolute sm:right-0 h-9 w-9 rounded-xl border border-border/60 flex items-center justify-center transition-colors",
             showSettings ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
           )}
           aria-label="Timer settings"

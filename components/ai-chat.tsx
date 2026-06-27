@@ -25,6 +25,10 @@ const SUGGESTIONS = [
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 
+// Chat history lives in sessionStorage so it survives navigating between
+// dashboard sections, yet clears automatically when the browser tab closes.
+const CHAT_STORAGE_KEY = "studyflow:tutor-chat";
+
 export function AiChat() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -34,6 +38,33 @@ export function AiChat() {
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const hydratedRef = useRef(false);
+
+  // Persist messages whenever they change. Declared BEFORE the load effect so
+  // that on first mount this runs while `hydratedRef` is still false and skips —
+  // preventing the empty initial state from overwriting a stored conversation.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    try {
+      sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      /* storage full or unavailable — non-fatal */
+    }
+  }, [messages]);
+
+  // Restore any in-progress conversation once, after mount (avoids SSR mismatch).
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(CHAT_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) setMessages(parsed as Msg[]);
+      }
+    } catch {
+      /* ignore malformed storage */
+    }
+    hydratedRef.current = true;
+  }, []);
 
   // Auto-scroll to the newest message.
   useEffect(() => {

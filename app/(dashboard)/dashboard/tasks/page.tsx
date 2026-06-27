@@ -12,8 +12,7 @@ import {
   ListTodo, 
   Filter, 
   AlertCircle, 
-  CheckCircle2, 
-  ChevronRight,
+  CheckCircle2,
   CalendarClock,
   Trash2,
   Undo2,
@@ -257,22 +256,22 @@ export default function TasksPage() {
         </div>
         <div className="lg:col-span-4">
           <div className="relative group h-14">
-            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-            <select 
+            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors z-10 pointer-events-none" />
+            <select
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="w-full h-full rounded-2xl border border-border/60 bg-card/50 pl-12 pr-10 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all appearance-none shadow-sm font-medium dark:bg-muted/40 dark:text-foreground"
+              className="w-full h-full rounded-2xl border border-border/60 bg-card/50 pl-12 pr-11 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all appearance-none shadow-sm font-semibold cursor-pointer hover:bg-card hover:border-border text-foreground dark:bg-muted/40 dark:hover:bg-muted/60 dark:text-foreground truncate"
             >
-              <option value="all" className="dark:bg-neutral-900">All Priorities</option>
-              <option value="high" className="dark:bg-neutral-900">🔥 High Priority</option>
-              <option value="medium" className="dark:bg-neutral-900">⚡ Medium Priority</option>
-              <option value="low" className="dark:bg-neutral-900">🌱 Low Priority</option>
-              <option value="overdue" className="dark:bg-neutral-900">⏰ Overdue Only</option>
-              <option value="today" className="dark:bg-neutral-900">📅 Due Today</option>
-              <option value="upcoming" className="dark:bg-neutral-900">🚀 Upcoming</option>
+              <option value="all" className="bg-background text-foreground dark:bg-neutral-900">All Priorities</option>
+              <option value="high" className="bg-background text-foreground dark:bg-neutral-900">🔥 High Priority</option>
+              <option value="medium" className="bg-background text-foreground dark:bg-neutral-900">⚡ Medium Priority</option>
+              <option value="low" className="bg-background text-foreground dark:bg-neutral-900">🌱 Low Priority</option>
+              <option value="overdue" className="bg-background text-foreground dark:bg-neutral-900">⏰ Overdue Only</option>
+              <option value="today" className="bg-background text-foreground dark:bg-neutral-900">📅 Due Today</option>
+              <option value="upcoming" className="bg-background text-foreground dark:bg-neutral-900">🚀 Upcoming</option>
             </select>
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground group-focus-within:text-primary transition-colors">
-              <ChevronRight className="h-4 w-4 rotate-90" />
+            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground group-focus-within:text-primary transition-all group-focus-within:rotate-180">
+              <ChevronDown className="h-4 w-4" />
             </div>
           </div>
         </div>
@@ -312,23 +311,26 @@ export default function TasksPage() {
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <CalendarIcon className="h-4 w-4 text-primary" /> Due Date
                   </label>
-                  <input name="deadline" type="date" defaultValue={editingTask?.deadline ?? ""} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
+                  <input name="deadline" type="date" defaultValue={editingTask?.deadline ?? ""} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 text-sm font-medium text-foreground focus:bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none cursor-pointer [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60 hover:[&::-webkit-calendar-picker-indicator]:opacity-100" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <Clock className="h-4 w-4 text-primary" /> Time (Optional)
                   </label>
-                  <input name="due_time" type="time" defaultValue={editingTask?.due_time?.slice(0, 5) ?? ""} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none" />
+                  <input name="due_time" type="time" defaultValue={editingTask?.due_time?.slice(0, 5) ?? ""} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 text-sm font-medium text-foreground focus:bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none cursor-pointer [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60 hover:[&::-webkit-calendar-picker-indicator]:opacity-100" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 text-primary" /> Priority
                   </label>
-                  <select name="priority" defaultValue={editingTask?.priority ?? "medium"} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none appearance-none">
-                    <option value="low" className="dark:bg-neutral-900">Low Priority</option>
-                    <option value="medium" className="dark:bg-neutral-900">Medium Priority</option>
-                    <option value="high" className="dark:bg-neutral-900">High Priority</option>
-                  </select>
+                  <div className="relative">
+                    <select name="priority" defaultValue={editingTask?.priority ?? "medium"} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 pl-4 pr-10 text-sm font-medium text-foreground focus:bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none appearance-none cursor-pointer">
+                      <option value="low" className="bg-background dark:bg-neutral-900">🌱 Low Priority</option>
+                      <option value="medium" className="bg-background dark:bg-neutral-900">⚡ Medium Priority</option>
+                      <option value="high" className="bg-background dark:bg-neutral-900">🔥 High Priority</option>
+                    </select>
+                    <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  </div>
                 </div>
               </div>
 
@@ -343,12 +345,15 @@ export default function TasksPage() {
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <Repeat className="h-4 w-4 text-primary" /> Repeat
                   </label>
-                  <select name="recurrence" defaultValue={editingTask?.recurrence ?? "none"} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 px-4 focus:bg-background dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none appearance-none">
-                    <option value="none" className="dark:bg-neutral-900">Does not repeat</option>
-                    <option value="daily" className="dark:bg-neutral-900">Daily</option>
-                    <option value="weekly" className="dark:bg-neutral-900">Weekly</option>
-                    <option value="monthly" className="dark:bg-neutral-900">Monthly</option>
-                  </select>
+                  <div className="relative">
+                    <select name="recurrence" defaultValue={editingTask?.recurrence ?? "none"} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 pl-4 pr-10 text-sm font-medium text-foreground focus:bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none appearance-none cursor-pointer">
+                      <option value="none" className="bg-background dark:bg-neutral-900">Does not repeat</option>
+                      <option value="daily" className="bg-background dark:bg-neutral-900">Daily</option>
+                      <option value="weekly" className="bg-background dark:bg-neutral-900">Weekly</option>
+                      <option value="monthly" className="bg-background dark:bg-neutral-900">Monthly</option>
+                    </select>
+                    <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  </div>
                 </div>
               </div>
 

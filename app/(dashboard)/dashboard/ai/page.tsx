@@ -174,13 +174,12 @@ export default function AIPage() {
               </div>
             </div>
             
-            <form action={generateBreakdown} className="space-y-4">
-              <div className="relative">
-                <input name="goal" placeholder="e.g. Prepare for OS final exam..." className="w-full rounded-xl border border-border/50 bg-background/50 px-4 py-3 pr-24 focus:bg-background transition-colors" />
-                <button disabled={isGenerating === "breakdown"} className="absolute right-1.5 top-1.5 bottom-1.5 rounded-lg bg-indigo-600 px-4 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 transition-colors flex items-center gap-1 disabled:opacity-70">
-                  {isGenerating === "breakdown" ? "..." : "Break down"}
-                </button>
-              </div>
+            <form action={generateBreakdown} className="flex flex-col sm:flex-row gap-2.5">
+              <input name="goal" placeholder="e.g. Prepare for OS final exam..." className="flex-1 w-full rounded-xl border border-border/50 bg-background/50 px-4 py-3 text-sm focus:bg-background focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-colors" />
+              <button disabled={isGenerating === "breakdown"} className="shrink-0 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-70">
+                {isGenerating === "breakdown" ? <BrainCircuit className="h-4 w-4 animate-spin" /> : <Target className="h-4 w-4" />}
+                {isGenerating === "breakdown" ? "Breaking down..." : "Break down"}
+              </button>
             </form>
 
             {breakdown.length > 0 && (
@@ -235,33 +234,7 @@ export default function AIPage() {
           </section>
         </div>
       </div>
-
-      <QuizCallout />
     </div>
-  );
-}
-
-function QuizCallout() {
-  return (
-    <a
-      href="/dashboard/tutor"
-      className="glass rounded-3xl p-6 md:p-8 flex items-center justify-between gap-4 group hover:shadow-md transition-all"
-    >
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-500">
-          <Sparkles className="h-6 w-6" />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold">Ask AI &amp; Quiz Me</h2>
-          <p className="text-sm text-muted-foreground">
-            Chat with your AI tutor, solve doubts from a photo, or quiz yourself from notes.
-          </p>
-        </div>
-      </div>
-      <span className="text-sm font-medium text-primary group-hover:translate-x-1 transition-transform">
-        Open →
-      </span>
-    </a>
   );
 }
 

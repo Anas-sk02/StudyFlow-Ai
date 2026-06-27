@@ -287,7 +287,7 @@ export function DashboardShell({ children, user }: { children: React.ReactNode; 
             </button>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3 sm:gap-4 shrink-0 ml-3 sm:ml-6">
             <NotificationBell />
             <button
               onClick={toggleTheme}
