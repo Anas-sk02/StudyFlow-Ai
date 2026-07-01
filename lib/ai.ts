@@ -587,6 +587,123 @@ function getSmartFallback<T>(prompt: string, fallback?: T): T {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  YouTube video → adaptive structured summary                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One section of the summary. Headings are NOT fixed — the model chooses
+ * them based on what the video actually contains (steps for a tutorial,
+ * arguments for an opinion piece, facts for a news clip, etc.).
+ */
+export type VideoSummarySection = {
+  heading: string;
+  timestamp?: string; // e.g. "04:12" — present only when the model can infer it
+  points: string[];
+};
+
+export type VideoSummary = {
+  videoType: string; // tutorial | lecture | informational | news | review | podcast | vlog | documentary | other
+  title: string;
+  topic: string;
+  tldr: string; // 2-3 line quick summary
+  overview: string; // one solid paragraph
+  sections: VideoSummarySection[]; // adaptive body — shape depends on the video
+  keyTakeaways: string[];
+  keyTerms: Array<{ term: string; definition: string }>; // empty for non-educational videos
+  actionItems: string[]; // empty when the video isn't actionable
+  difficulty?: string; // Beginner | Intermediate | Advanced — optional
+};
+
+/** Pull the 11-char video id out of any common YouTube URL shape. */
+export function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=)([\w-]{11})/,
+    /(?:youtu\.be\/)([\w-]{11})/,
+    /(?:youtube\.com\/embed\/)([\w-]{11})/,
+    /(?:youtube\.com\/shorts\/)([\w-]{11})/,
+    /(?:youtube\.com\/live\/)([\w-]{11})/,
+  ];
+  for (const re of patterns) {
+    const m = url.match(re);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+const VIDEO_SUMMARY_PROMPT = `You are an expert study assistant. Watch the given YouTube video and produce a faithful, well-structured summary of EVERYTHING it covers.
+
+CRITICAL — adapt to the video, do not force a template:
+1. First figure out what KIND of video this is (a coding tutorial, a classroom lecture, a news report, a product review, a podcast, a documentary, an informational explainer, a vlog, etc.).
+2. Then shape the summary to match that kind. A tutorial should read as ordered steps; a lecture as concepts taught; a news clip as who/what/when/why; a review as pros/cons/verdict; a podcast as the discussion threads. Choose the section headings yourself based on the real content — do NOT invent generic headings.
+3. Cover the WHOLE video start to finish, in order. Do not skip parts. If the video moves through phases, reflect that in "sections".
+4. Add a "timestamp" to a section only when you can reasonably infer where it starts. Omit it otherwise.
+5. Leave arrays empty ([]) when a field does not apply to this video type (e.g. no "keyTerms" for a vlog, no "actionItems" for a documentary). Never fill them with filler.
+6. Match the language of the video for the content (if the video is in Hindi, summarise in Hindi; if English, English).
+
+Return ONLY this JSON shape:
+{
+  "videoType": string,
+  "title": string,
+  "topic": string,
+  "tldr": string,
+  "overview": string,
+  "sections": [ { "heading": string, "timestamp": string (optional), "points": [string, ...] } ],
+  "keyTakeaways": [string, ...],
+  "keyTerms": [ { "term": string, "definition": string } ],
+  "actionItems": [string, ...],
+  "difficulty": string (optional)
+}`;
+
+/**
+ * Summarise a YouTube video. Only Gemini natively ingests a YouTube URL
+ * (audio + on-screen visuals) with no transcript library, so this walks the
+ * configured Gemini keys/models in order and returns the first valid JSON.
+ * Throws a friendly error if no Gemini key is set or every attempt fails.
+ */
+export async function generateVideoSummary(youtubeUrl: string): Promise<VideoSummary> {
+  const keys = geminiKeys();
+  if (keys.length === 0) {
+    throw new Error(
+      "Video summaries need a Gemini API key. Add GEMINI_API_KEY to enable this feature."
+    );
+  }
+
+  let lastError = "";
+  for (const [i, key] of keys.entries()) {
+    const genAI = new GoogleGenerativeAI(key);
+    for (const modelName of ["gemini-2.5-flash", "gemini-2.0-flash"]) {
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { fileData: { mimeType: "video/*", fileUri: youtubeUrl } },
+                { text: VIDEO_SUMMARY_PROMPT },
+              ],
+            },
+          ],
+        });
+        const raw = result.response.text();
+        return JSON.parse(cleanJSON(raw)) as VideoSummary;
+      } catch (error: unknown) {
+        lastError = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `Video summary via gemini:${modelName}#${i + 1} failed, trying next. Reason: ${lastError}`
+        );
+      }
+    }
+  }
+
+  throw new Error(
+    lastError.toLowerCase().includes("json")
+      ? "Could not read this video clearly. Try another video or check the link."
+      : "Couldn't summarise this video. It may be private, age-restricted, too long, or the AI quota is exhausted."
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Conversational chat + image (vision) — used by the Ask AI / Doubt Solver  */
 /* -------------------------------------------------------------------------- */
 
