@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { LeaderboardEntrySkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/states";
 import Image from "next/image";
+import Link from "next/link";
 
 type LeaderboardEntry = {
   userId: string;
@@ -28,6 +29,7 @@ type LeaderboardEntry = {
   streakDays: number;
   totalFocusMinutes: number;
   fullName: string;
+  username?: string;
   avatarUrl?: string;
 };
 
@@ -173,6 +175,7 @@ export default function LeaderboardPage() {
           streakDays: stat.streak_days,
           totalFocusMinutes: stat.total_focus_minutes,
           fullName: prof.full_name || prof.username || prof.email?.split("@")[0] || "Student",
+          username: prof.username || undefined,
           avatarUrl: prof.avatar_url
         };
       });
@@ -535,7 +538,19 @@ export default function LeaderboardPage() {
                       )}
 
                       <div className="min-w-0">
-                        <p className={cn("text-sm font-bold truncate", isCurrentUser && "text-foreground")}>{user.fullName}</p>
+                        {user.username ? (
+                          <Link
+                            href={`/u/${user.username}`}
+                            className={cn(
+                              "text-sm font-bold truncate hover:underline underline-offset-2",
+                              isCurrentUser && "text-foreground",
+                            )}
+                          >
+                            {user.fullName}
+                          </Link>
+                        ) : (
+                          <p className={cn("text-sm font-bold truncate", isCurrentUser && "text-foreground")}>{user.fullName}</p>
+                        )}
                         <p className="text-[10px] text-muted-foreground font-medium">Level {user.level}</p>
                       </div>
                     </div>

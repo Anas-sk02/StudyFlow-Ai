@@ -2,10 +2,13 @@
 
 import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/supabase/client";
-import { User, Save, Loader2, Image as ImageIcon } from "lucide-react";
+import { User, Save, Loader2, Image as ImageIcon, ExternalLink, Users } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { UserSearch } from "@/components/user-search";
+import { cn } from "@/lib/utils";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -20,6 +23,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [tab, setTab] = useState<"general" | "search">("general");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -140,22 +144,66 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl">
-      <div className="flex flex-col gap-1 mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Profile Settings</h1>
-        <p className="text-muted-foreground">Manage your account preferences and personal details.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-3xl font-bold tracking-tight">Profile Settings</h1>
+          <p className="text-muted-foreground">Manage your account preferences and personal details.</p>
+        </div>
+        {username && (
+          <Link
+            href={`/u/${username}`}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-xl text-sm font-medium hover:bg-muted/80 transition-colors shrink-0 w-fit"
+          >
+            <ExternalLink className="h-4 w-4" />
+            View public profile
+          </Link>
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-4">
         {/* Left Column - Navigation */}
         <div className="space-y-2 md:col-span-1">
-          <button className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl bg-primary/10 text-primary font-medium transition-colors">
+          <button
+            onClick={() => setTab("general")}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium transition-colors",
+              tab === "general"
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted",
+            )}
+          >
             <User className="h-4 w-4" />
             General Profile
+          </button>
+          <button
+            onClick={() => setTab("search")}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium transition-colors",
+              tab === "search"
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted",
+            )}
+          >
+            <Users className="h-4 w-4" />
+            Search Profiles
           </button>
         </div>
 
         {/* Right Column - Form */}
         <div className="md:col-span-3 space-y-6">
+          {tab === "search" && (
+            <section className="glass rounded-2xl p-6 md:p-8 space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold mb-1">Search Profiles</h2>
+                <p className="text-sm text-muted-foreground mb-6">
+                  Find other students by username or name and view their public profile, streak, and XP.
+                </p>
+                <UserSearch />
+              </div>
+            </section>
+          )}
+
+          {tab === "general" && (
           <section className="glass rounded-2xl p-6 md:p-8 space-y-8">
             <div>
               <h2 className="text-xl font-semibold mb-1">Public Profile</h2>
@@ -276,6 +324,7 @@ export default function ProfilePage() {
               </button>
             </div>
           </section>
+          )}
         </div>
       </div>
     </div>
