@@ -726,7 +726,8 @@ function parseDataUrl(dataUrl: string): { mimeType: string; data: string } | nul
 
 type ChatProvider = {
   name: string;
-  run: (messages: ChatMessage[], imageDataUrl?: string) => Promise<string>;
+  /** Streams the reply chunk by chunk so the UI can render text as it arrives. */
+  stream: (messages: ChatMessage[], imageDataUrl?: string) => AsyncGenerator<string>;
 };
 
 /**
@@ -743,7 +744,7 @@ function buildChatProviders(hasImage: boolean): ChatProvider[] {
     for (const modelName of geminiModels) {
       providers.push({
         name: `gemini:${modelName}#${i + 1}`,
-        run: async (messages, imageDataUrl) => {
+        stream: async function* (messages, imageDataUrl) {
           const model = genAI.getGenerativeModel({
             model: modelName,
             systemInstruction: TUTOR_SYSTEM,
@@ -762,8 +763,11 @@ function buildChatProviders(hasImage: boolean): ChatProvider[] {
               });
             }
           }
-          const result = await model.generateContent({ contents });
-          return result.response.text();
+          const result = await model.generateContentStream({ contents });
+          for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) yield text;
+          }
         },
       });
     }
@@ -781,8 +785,8 @@ function buildChatProviders(hasImage: boolean): ChatProvider[] {
     for (const modelName of models) {
       providers.push({
         name: `groq:${modelName}`,
-        run: (messages, imageDataUrl) =>
-          openAICompatChat(groq, modelName, messages, imageDataUrl),
+        stream: (messages, imageDataUrl) =>
+          openAICompatChatStream(groq, modelName, messages, imageDataUrl),
       });
     }
   }
@@ -799,8 +803,8 @@ function buildChatProviders(hasImage: boolean): ChatProvider[] {
     for (const modelName of models) {
       providers.push({
         name: `openrouter:${modelName}`,
-        run: (messages, imageDataUrl) =>
-          openAICompatChat(openrouter, modelName, messages, imageDataUrl),
+        stream: (messages, imageDataUrl) =>
+          openAICompatChatStream(openrouter, modelName, messages, imageDataUrl),
       });
     }
   }
@@ -808,13 +812,13 @@ function buildChatProviders(hasImage: boolean): ChatProvider[] {
   return providers;
 }
 
-/** Shared OpenAI-compatible chat call (Groq + OpenRouter). */
-async function openAICompatChat(
+/** Shared OpenAI-compatible streaming chat call (Groq + OpenRouter). */
+async function* openAICompatChatStream(
   client: OpenAI,
   model: string,
   messages: ChatMessage[],
   imageDataUrl?: string
-): Promise<string> {
+): AsyncGenerator<string> {
   const history = messages.map((m) => ({ role: m.role, content: m.content }));
 
   // Attach the image to the final user turn as multimodal content.
@@ -828,26 +832,32 @@ async function openAICompatChat(
     }
   }
 
-  const res = await client.chat.completions.create({
+  const stream = await client.chat.completions.create({
     model,
     messages: [
       { role: "system", content: TUTOR_SYSTEM },
       ...history,
     ] as never,
     temperature: 0.7,
+    stream: true,
   });
-  return res.choices[0]?.message?.content ?? "";
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content;
+    if (text) yield text;
+  }
 }
 
 /**
- * Conversational reply across the free provider chain. Returns the first
- * non-empty response. Throws only if every provider fails (the route turns
- * that into a friendly error message).
+ * Streams a conversational reply across the free provider chain, yielding
+ * text chunks as they arrive. If a provider fails BEFORE emitting any text,
+ * the next one is tried; once text has started flowing a mid-stream failure
+ * ends the stream (the partial text already reached the user).
+ * Throws only if every provider fails without producing anything.
  */
-export async function generateText(
+export async function* generateTextStream(
   messages: ChatMessage[],
   imageDataUrl?: string
-): Promise<string> {
+): AsyncGenerator<string> {
   const providers = buildChatProviders(Boolean(imageDataUrl));
 
   if (providers.length === 0) {
@@ -856,15 +866,39 @@ export async function generateText(
 
   let lastError = "";
   for (const provider of providers) {
+    let emitted = false;
     try {
-      const text = (await provider.run(messages, imageDataUrl))?.trim();
-      if (text) return text;
+      for await (const chunk of provider.stream(messages, imageDataUrl)) {
+        emitted = true;
+        yield chunk;
+      }
+      if (emitted) return;
       lastError = `${provider.name} returned an empty response`;
     } catch (error: unknown) {
       lastError = error instanceof Error ? error.message : String(error);
       console.warn(`Chat provider "${provider.name}" failed, trying next. Reason: ${lastError}`);
+      // Partial text already reached the client — stop rather than restart
+      // the answer with a different model mid-message.
+      if (emitted) return;
     }
   }
 
   throw new Error(lastError || "All AI providers are unavailable right now.");
+}
+
+/**
+ * Non-streaming conversational reply (kept for callers that need the full
+ * text at once). Accumulates the stream from the same provider chain.
+ */
+export async function generateText(
+  messages: ChatMessage[],
+  imageDataUrl?: string
+): Promise<string> {
+  let text = "";
+  for await (const chunk of generateTextStream(messages, imageDataUrl)) {
+    text += chunk;
+  }
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("All AI providers are unavailable right now.");
+  return trimmed;
 }

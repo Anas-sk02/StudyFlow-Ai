@@ -34,6 +34,9 @@ export function AiChat() {
   const [input, setInput] = useState("");
   const [image, setImage] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  // True once the first streamed chunk has arrived — swaps the typing dots
+  // for the live-growing assistant bubble.
+  const [streamStarted, setStreamStarted] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -105,6 +108,7 @@ export function AiChat() {
     const sentImage = image;
     setImage(null);
     setSending(true);
+    setStreamStarted(false);
 
     try {
       const res = await fetch("/api/ai/chat", {
@@ -115,9 +119,58 @@ export function AiChat() {
           image: sentImage || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Something went wrong");
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
+
+      // Non-streaming error responses (auth, validation) come back as JSON.
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Something went wrong");
+      }
+
+      // Read the SSE stream and grow the assistant bubble as chunks arrive.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let reply = "";
+      let started = false;
+
+      const appendChunk = (chunk: string) => {
+        reply += chunk;
+        if (!started) {
+          started = true;
+          setStreamStarted(true);
+          setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+        } else {
+          setMessages((prev) => {
+            const next = [...prev];
+            next[next.length - 1] = { role: "assistant", content: reply };
+            return next;
+          });
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE events are separated by a blank line; keep any partial event in the buffer.
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+        for (const event of events) {
+          const line = event.split("\n").find((l) => l.startsWith("data: "));
+          if (!line) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.text) appendChunk(data.text);
+            if (data.error) throw new Error(data.error);
+          } catch (e) {
+            if (e instanceof Error && !(e instanceof SyntaxError)) throw e;
+            /* ignore malformed chunks */
+          }
+        }
+      }
+
+      if (!reply) throw new Error("AI is unavailable. Please try again in a moment.");
     } catch (e) {
       setMessages((prev) => [
         ...prev,
@@ -129,6 +182,7 @@ export function AiChat() {
       ]);
     } finally {
       setSending(false);
+      setStreamStarted(false);
     }
   }
 
@@ -240,7 +294,7 @@ export function AiChat() {
           })
         )}
 
-        {sending && (
+        {sending && !streamStarted && (
           <div className="flex w-full gap-3.5 justify-start animate-slide-up">
             <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center shadow-sm">
               <Bot className="h-4 w-4" />
