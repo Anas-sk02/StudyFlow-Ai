@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { createClient } from "@/supabase/client";
-import { Send, Users, Hash, Plus, MessageSquare } from "lucide-react";
+import { Send, Users, Hash, Plus, MessageSquare, Maximize2, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Dropdown } from "@/components/ui/dropdown";
 
 type Message = { 
   id: string; 
@@ -25,6 +26,7 @@ export default function RoomsPage() {
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [typing, setTyping] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   const roomChannelRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -55,6 +57,16 @@ export default function RoomsPage() {
   };
 
   const activeRoom = useMemo(() => rooms.find((room) => room.id === activeRoomId), [rooms, activeRoomId]);
+  const roomOptions = useMemo(
+    () =>
+      rooms.map((room) => ({
+        value: room.id,
+        label: room.name,
+        hint: room.topic,
+        icon: <Hash className="h-4 w-4" />,
+      })),
+    [rooms]
+  );
 
   useEffect(() => {
     void (async () => {
@@ -169,9 +181,40 @@ export default function RoomsPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col md:flex-row gap-6 animate-fade-in">
-      {/* Sidebar: Rooms List */}
-      <section className="glass rounded-3xl w-full md:w-[320px] shrink-0 flex flex-col overflow-hidden shadow-sm">
+    <div className="h-[calc(100vh-8rem)] flex flex-col md:flex-row gap-4 md:gap-6 animate-fade-in">
+      {/* Mobile: compact dropdown room picker (sidebar is hidden on small screens) */}
+      <div className="md:hidden flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <Dropdown
+            className="flex-1"
+            value={activeRoomId}
+            onChange={setActiveRoomId}
+            options={roomOptions}
+            placeholder={rooms.length ? "Select a study room" : "No rooms yet"}
+            aria-label="Select study room"
+          />
+          <button
+            onClick={() => setIsCreating(!isCreating)}
+            className="shrink-0 h-11 w-11 flex items-center justify-center rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all active:scale-95"
+            title="Create Room"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+        </div>
+        {isCreating && (
+          <form action={createRoom} className="glass rounded-2xl p-4 space-y-3 animate-slide-down">
+            <input name="name" required placeholder="Room name" className="w-full rounded-xl border border-border/50 bg-background/80 px-3 py-2.5 text-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none transition-all" />
+            <input name="topic" required placeholder="Topic" className="w-full rounded-xl border border-border/50 bg-background/80 px-3 py-2.5 text-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none transition-all" />
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={() => setIsCreating(false)} className="flex-1 rounded-xl border border-border/50 py-2.5 text-xs font-medium hover:bg-muted transition-colors">Cancel</button>
+              <button className="flex-1 rounded-xl bg-primary py-2.5 text-xs font-medium text-primary-foreground shadow-sm hover:shadow-md transition-all">Create</button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      {/* Sidebar: Rooms List (desktop only) */}
+      <section className="glass rounded-3xl w-full md:w-[320px] shrink-0 hidden md:flex flex-col overflow-hidden shadow-sm">
         <div className="p-5 flex items-center justify-between border-b border-border/40 bg-card/30">
           <h2 className="font-semibold text-lg flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" /> Study Rooms
@@ -229,14 +272,31 @@ export default function RoomsPage() {
       </section>
 
       {/* Main Area: Chat */}
-      <section className="glass rounded-3xl flex-1 flex flex-col overflow-hidden relative shadow-sm">
+      <section
+        className={cn(
+          "glass flex-1 flex flex-col overflow-hidden relative shadow-sm",
+          isFullscreen
+            ? "fixed inset-0 z-[60] rounded-none md:static md:z-auto md:rounded-3xl"
+            : "rounded-3xl"
+        )}
+      >
         {activeRoom ? (
           <>
-            <div className="px-6 py-5 border-b border-border/40 flex flex-col bg-card/40 backdrop-blur-xl z-10 shadow-sm">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <Hash className="h-5 w-5 text-primary" /> {activeRoom.name}
-              </h3>
-              <p className="text-sm text-muted-foreground ml-7">{activeRoom.topic}</p>
+            <div className="px-5 md:px-6 py-4 md:py-5 border-b border-border/40 flex items-center justify-between gap-3 bg-card/40 backdrop-blur-xl z-10 shadow-sm">
+              <div className="min-w-0">
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <Hash className="h-5 w-5 text-primary shrink-0" /> <span className="truncate">{activeRoom.name}</span>
+                </h3>
+                <p className="text-sm text-muted-foreground ml-7 truncate">{activeRoom.topic}</p>
+              </div>
+              <button
+                onClick={() => setIsFullscreen((f) => !f)}
+                className="md:hidden shrink-0 h-9 w-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-all active:scale-95"
+                title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              >
+                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-gradient-to-b from-background/30 to-background/5">

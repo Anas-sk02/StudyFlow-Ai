@@ -11,8 +11,11 @@ import {
   User as UserIcon,
   Loader2,
   Eraser,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { MarkdownLite } from "@/components/markdown-lite";
+import { cn } from "@/lib/utils";
 
 type Msg = { role: "user" | "assistant"; content: string; image?: string };
 
@@ -34,6 +37,8 @@ export function AiChat() {
   const [input, setInput] = useState("");
   const [image, setImage] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  // Mobile-only fullscreen mode (the toggle button is hidden on md+ screens).
+  const [isFullscreen, setIsFullscreen] = useState(false);
   // True once the first streamed chunk has arrived — swaps the typing dots
   // for the live-growing assistant bubble.
   const [streamStarted, setStreamStarted] = useState(false);
@@ -196,7 +201,14 @@ export function AiChat() {
   const empty = messages.length === 0;
 
   return (
-    <div className="flex flex-col h-full min-h-0 glass rounded-3xl overflow-hidden">
+    <div
+      className={cn(
+        "flex flex-col h-full min-h-0 glass overflow-hidden",
+        isFullscreen
+          ? "fixed inset-0 z-[60] rounded-none md:static md:z-auto md:rounded-3xl"
+          : "rounded-3xl"
+      )}
+    >
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-border/50 bg-background/40">
         <div className="flex items-center gap-2.5">
@@ -211,14 +223,24 @@ export function AiChat() {
             <p className="text-[11px] text-muted-foreground">Ask anything · upload a photo of your doubt</p>
           </div>
         </div>
-        {!empty && (
+        <div className="flex items-center gap-1.5">
+          {!empty && (
+            <button
+              onClick={() => setMessages([])}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground rounded-lg px-2.5 py-1.5 hover:bg-muted transition-colors"
+            >
+              <Eraser className="h-3.5 w-3.5" /> Clear
+            </button>
+          )}
           <button
-            onClick={() => setMessages([])}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground rounded-lg px-2.5 py-1.5 hover:bg-muted transition-colors"
+            onClick={() => setIsFullscreen((f) => !f)}
+            className="md:hidden h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
           >
-            <Eraser className="h-3.5 w-3.5" /> Clear
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
-        )}
+        </div>
       </div>
 
       {/* Messages */}

@@ -13,6 +13,7 @@ import {
   Timer,
   Lightbulb,
 } from "lucide-react";
+import { Dropdown } from "@/components/ui/dropdown";
 
 type QuizQuestion = {
   question: string;
@@ -174,17 +175,20 @@ export function QuizGenerator() {
               className="hidden"
               onChange={(e) => setFileName(e.target.files?.[0]?.name || "")}
             />
-            <div className="space-y-1.5 sm:w-32">
-              <select
+            <div className="space-y-1.5 sm:w-40">
+              <Dropdown
                 name="count"
                 defaultValue="5"
-                className="w-full rounded-xl border border-border/50 bg-background/50 px-3 py-2.5 text-sm focus:bg-background transition-colors"
-              >
-                <option value="3">3 questions</option>
-                <option value="5">5 questions</option>
-                <option value="8">8 questions</option>
-                <option value="10">10 questions</option>
-              </select>
+                aria-label="Number of questions"
+                align="end"
+                buttonClassName="bg-background/50"
+                options={[
+                  { value: "3", label: "3 questions" },
+                  { value: "5", label: "5 questions" },
+                  { value: "8", label: "8 questions" },
+                  { value: "10", label: "10 questions" },
+                ]}
+              />
             </div>
           </div>
 

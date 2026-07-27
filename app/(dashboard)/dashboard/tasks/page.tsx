@@ -30,6 +30,7 @@ import type { StudyTask, Subtask } from "@/lib/types";
 import { createTaskAction, updateTaskAction, toggleTaskAction, deleteTaskAction, rescheduleTaskAction } from "./actions";
 import { cn } from "@/lib/utils";
 import { TaskCardSkeleton } from "@/components/ui/skeleton";
+import { Dropdown } from "@/components/ui/dropdown";
 
 export default function TasksPage() {
   const supabase = createClient();
@@ -257,22 +258,21 @@ export default function TasksPage() {
         <div className="lg:col-span-4">
           <div className="relative group h-14">
             <Filter className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors z-10 pointer-events-none" />
-            <select
+            <Dropdown
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="w-full h-full rounded-2xl border border-border/60 bg-card/50 pl-12 pr-11 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all appearance-none shadow-sm font-semibold cursor-pointer hover:bg-card hover:border-border text-foreground dark:bg-muted/40 dark:hover:bg-muted/60 dark:text-foreground truncate"
-            >
-              <option value="all" className="bg-background text-foreground dark:bg-neutral-900">All Priorities</option>
-              <option value="high" className="bg-background text-foreground dark:bg-neutral-900">🔥 High Priority</option>
-              <option value="medium" className="bg-background text-foreground dark:bg-neutral-900">⚡ Medium Priority</option>
-              <option value="low" className="bg-background text-foreground dark:bg-neutral-900">🌱 Low Priority</option>
-              <option value="overdue" className="bg-background text-foreground dark:bg-neutral-900">⏰ Overdue Only</option>
-              <option value="today" className="bg-background text-foreground dark:bg-neutral-900">📅 Due Today</option>
-              <option value="upcoming" className="bg-background text-foreground dark:bg-neutral-900">🚀 Upcoming</option>
-            </select>
-            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground group-focus-within:text-primary transition-all group-focus-within:rotate-180">
-              <ChevronDown className="h-4 w-4" />
-            </div>
+              onChange={setFilter}
+              aria-label="Filter tasks"
+              buttonClassName="h-14 rounded-2xl bg-card/50 pl-12 font-semibold dark:bg-muted/40"
+              options={[
+                { value: "all", label: "All Priorities" },
+                { value: "high", label: "🔥 High Priority" },
+                { value: "medium", label: "⚡ Medium Priority" },
+                { value: "low", label: "🌱 Low Priority" },
+                { value: "overdue", label: "⏰ Overdue Only" },
+                { value: "today", label: "📅 Due Today" },
+                { value: "upcoming", label: "🚀 Upcoming" },
+              ]}
+            />
           </div>
         </div>
       </div>
@@ -323,14 +323,18 @@ export default function TasksPage() {
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 text-primary" /> Priority
                   </label>
-                  <div className="relative">
-                    <select name="priority" defaultValue={editingTask?.priority ?? "medium"} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 pl-4 pr-10 text-sm font-medium text-foreground focus:bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none appearance-none cursor-pointer">
-                      <option value="low" className="bg-background dark:bg-neutral-900">🌱 Low Priority</option>
-                      <option value="medium" className="bg-background dark:bg-neutral-900">⚡ Medium Priority</option>
-                      <option value="high" className="bg-background dark:bg-neutral-900">🔥 High Priority</option>
-                    </select>
-                    <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                  </div>
+                  <Dropdown
+                    key={editingTask?.id ?? "new"}
+                    name="priority"
+                    defaultValue={editingTask?.priority ?? "medium"}
+                    aria-label="Priority"
+                    buttonClassName="h-12 bg-background/50 dark:bg-muted/20"
+                    options={[
+                      { value: "low", label: "🌱 Low Priority" },
+                      { value: "medium", label: "⚡ Medium Priority" },
+                      { value: "high", label: "🔥 High Priority" },
+                    ]}
+                  />
                 </div>
               </div>
 
@@ -345,15 +349,20 @@ export default function TasksPage() {
                   <label className="text-sm font-bold text-foreground/80 flex items-center gap-2">
                     <Repeat className="h-4 w-4 text-primary" /> Repeat
                   </label>
-                  <div className="relative">
-                    <select name="recurrence" defaultValue={editingTask?.recurrence ?? "none"} className="w-full h-12 rounded-xl border border-border/60 bg-background/50 pl-4 pr-10 text-sm font-medium text-foreground focus:bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary dark:bg-muted/20 dark:focus:bg-muted/40 transition-all outline-none appearance-none cursor-pointer">
-                      <option value="none" className="bg-background dark:bg-neutral-900">Does not repeat</option>
-                      <option value="daily" className="bg-background dark:bg-neutral-900">Daily</option>
-                      <option value="weekly" className="bg-background dark:bg-neutral-900">Weekly</option>
-                      <option value="monthly" className="bg-background dark:bg-neutral-900">Monthly</option>
-                    </select>
-                    <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                  </div>
+                  <Dropdown
+                    key={editingTask?.id ?? "new"}
+                    name="recurrence"
+                    defaultValue={editingTask?.recurrence ?? "none"}
+                    aria-label="Repeat"
+                    align="end"
+                    buttonClassName="h-12 bg-background/50 dark:bg-muted/20"
+                    options={[
+                      { value: "none", label: "Does not repeat" },
+                      { value: "daily", label: "Daily" },
+                      { value: "weekly", label: "Weekly" },
+                      { value: "monthly", label: "Monthly" },
+                    ]}
+                  />
                 </div>
               </div>
 

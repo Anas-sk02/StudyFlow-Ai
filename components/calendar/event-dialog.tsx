@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { X, Trash2, Save, BookmarkPlus, Timer, ListTodo, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Dropdown } from "@/components/ui/dropdown";
 import {
   COLOR_KEYS, EVENT_COLORS, KIND_KEYS, KIND_META, colorTokens, formatTime, localDateKey,
 } from "@/lib/calendar";
@@ -183,9 +184,13 @@ function EventForm({ selection, onClose, createEvent, updateEvent, deleteEvent, 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Type</label>
-            <select value={kind} onChange={(e) => onSelectKind(e.target.value as EventKind)} className={cn(inputCls, "appearance-none")}>
-              {KIND_KEYS.map((k) => <option key={k} value={k} className="dark:bg-neutral-900">{KIND_META[k].label}</option>)}
-            </select>
+            <Dropdown
+              value={kind}
+              onChange={(v) => onSelectKind(v as EventKind)}
+              aria-label="Event type"
+              buttonClassName="h-11 bg-background/50 dark:bg-muted/20"
+              options={KIND_KEYS.map((k) => ({ value: k, label: KIND_META[k].label }))}
+            />
           </div>
           <div>
             <label className={labelCls}>Subject</label>
@@ -220,10 +225,17 @@ function EventForm({ selection, onClose, createEvent, updateEvent, deleteEvent, 
         {tasks.length > 0 && (
           <div>
             <label className={labelCls}>Link a task (optional)</label>
-            <select value={taskId} onChange={(e) => setTaskId(e.target.value)} className={cn(inputCls, "appearance-none")}>
-              <option value="" className="dark:bg-neutral-900">No task</option>
-              {tasks.filter((t) => t.status !== "done").map((t) => <option key={t.id} value={t.id} className="dark:bg-neutral-900">{t.title}</option>)}
-            </select>
+            <Dropdown
+              value={taskId}
+              onChange={setTaskId}
+              aria-label="Link a task"
+              placeholder="No task"
+              buttonClassName="h-11 bg-background/50 dark:bg-muted/20"
+              options={[
+                { value: "", label: "No task" },
+                ...tasks.filter((t) => t.status !== "done").map((t) => ({ value: t.id, label: t.title })),
+              ]}
+            />
           </div>
         )}
 
